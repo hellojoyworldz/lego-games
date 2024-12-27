@@ -1,0 +1,139 @@
+@font-face {
+  font-family: "Orbit";
+  src: url("./font/Orbitron-VariableFont_wght.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "agdasima";
+  src: url("./font/Agdasima-Regular.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "agdasima";
+  src: url("./font/Agdasima-Bold.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0;
+  height: 100dvh;
+  font-family: "Orbit";
+  color: #fff;
+  background-color: #000;
+  overflow: hidden;
+  touch-action: none;
+  -ms-touch-action: none;
+}
+
+#wrap {
+  width: 697px;
+  height: 1239px;
+}
+
+.start-page {
+  position: relative;
+  display: flex;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  background: #9f76c0;
+  overflow: hidden;
+
+  .title {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    justify-content: center;
+    height: 50%;
+    font-size: 6rem;
+    font-weight: 700;
+    color: #fff;
+    z-index: 10;
+    strong {
+      font-size: 6.2rem;
+    }
+  }
+
+  .content {
+    position: relative;
+    width: 100%;
+    height: 50%;
+    text-align: center;
+    z-index: 10;
+
+    .start-button {
+      padding: 16px;
+      font-family: "agdasima";
+      font-size: 4rem;
+      color: #fff;
+      border: 0px;
+      background: transparent;
+      cursor: pointer;
+      animation: blink 2s infinite;
+    }
+  }
+  .bg {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+  }
+
+  .arrow {
+    position: absolute;
+    top: -100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+    animation: flow 15s linear infinite;
+
+    .circle {
+      display: inline-block;
+      width: 6rem;
+      height: 6rem;
+      border-radius: 50%;
+    }
+
+    .arrow-left {
+      background: #fff;
+    }
+
+    .arrow-right {
+      background: #000;
+    }
+  }
+}
+
+@keyframes blink {
+  0% {
+    opacity: 1;
+  }
+  40% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes flow {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(50%);
+  }
+}
