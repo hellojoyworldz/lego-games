@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>777 슬롯머신</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        margin: 0;
+        background-color: #1f2937;
+        color: white;
+      }
+      .container {
+        text-align: center;
+        padding: 2rem;
+        background-color: #374151;
+        border-radius: 1rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+      .slot-machine {
+        display: flex;
+        gap: 1rem;
+        margin: 2rem 0;
+        justify-content: center;
+      }
+      .reel {
+        width: 100px;
+        height: 100px;
+        background-color: #4b5563;
+        border: 4px solid #fbbf24;
+        border-radius: 0.5rem;
+        overflow: hidden;
+        position: relative;
+        display: flex;
+        justify-content: center;
+      }
+      .reel.spinning {
+        border-color: #ef4444;
+      }
+      .symbols-strip {
+        position: absolute;
+        left: 0;
+        right: 0;
+        display: flex;
+        flex-direction: column;
+        will-change: transform;
+      }
+      .symbol {
+        width: 100px;
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .symbol span {
+        font-size: 3rem;
+        line-height: 1;
+        height: 3rem;
+        display: block;
+      }
+      button {
+        padding: 0.75rem 1.5rem;
+        font-size: 1.25rem;
+        font-weight: bold;
+        border: none;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        margin: 0 0.5rem;
+        transition: all 0.2s;
+      }
+      button:disabled {
+        background-color: #6b7280;
+        cursor: not-allowed;
+      }
+      .spin-button {
+        background-color: #fbbf24;
+      }
+      .spin-button:hover:not(:disabled) {
+        background-color: #f59e0b;
+      }
+      .stop-button {
+        background-color: #ef4444;
+      }
+      .stop-button:hover:not(:disabled) {
+        background-color: #dc2626;
+      }
+      .slow-button {
+        background-color: #10b981;
+      }
+      .slow-button:hover:not(:disabled) {
+        background-color: #059669;
+      }
+      .input-field {
+        width: 150px;
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        border: none;
+        margin-right: 1rem;
+        background-color: #4b5563;
+        color: white;
+        font-size: 1.25rem;
+      }
+      .status-text {
+        margin: 1rem 0;
+        font-size: 1.25rem;
+      }
+      .info {
+        margin-top: 1.5rem;
+        color: #9ca3af;
+        font-size: 0.875rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>777 슬롯머신</h1>
+
+      <div class="slot-machine">
+        <div class="reel" id="reel1"><div class="symbols-strip"></div></div>
+        <div class="reel" id="reel2"><div class="symbols-strip"></div></div>
+        <div class="reel" id="reel3"><div class="symbols-strip"></div></div>
+      </div>
+
+      <div class="status-text" id="credits">크레딧: 1000</div>
+      <div class="status-text" id="speedStatus">현재 속도: 보통</div>
+
+      <div style="margin-bottom: 0.5rem; color: #10b981" id="costPreview">
+        예상 비용: 100 크레딧
+      </div>
+
+      <div style="margin-bottom: 1rem">
+        <label for="betInput">베팅 금액:</label>
+        <input
+          type="number"
+          id="betInput"
+          min="100"
+          value="100"
+          class="input-field"
+        />
+      </div>
+
+      <div style="margin: 1rem 0">
+        <button class="spin-button" id="spinButton">스핀!</button>
+        <button class="stop-button" id="stopButton" disabled>정지</button>
+        <button class="slow-button" id="slowButton">
+          속도 감소 (50 크레딧)
+        </button>
+      </div>
+
+      <div class="status-text" id="message">게임을 시작하세요!</div>
+
+      <div class="info">
+        배당금:<br />
+        777: 베팅액 x 50<br />
+        3개 같은 심볼: 베팅액 x 10<br />
+        2개 같은 심볼: 베팅액 x 2
+      </div>
+    </div>
+
+    <script>
+      const symbols = ["7", "🍒", "🍊", "🍋", "💎", "⭐"];
+      let credits = 1000;
+      let currentSpeed = 30;
+      let currentBet = 100;
+      let speedDecreaseCost = 0;
+      let animationFrames = [null, null, null];
+      let nextStopIndex = 0;
+      let isSpinning = false;
+      let positions = [0, 0, 0];
+
+      // 속도 상수
+      const SPEED_NORMAL = 30;
+      const SPEED_SLOW = 15;
+      const SPEED_VERY_SLOW = 7.5;
+
+      const reels = [
+        document.getElementById("reel1"),
+        document.getElementById("reel2"),
+        document.getElementById("reel3"),
+      ];
+
+      const strips = reels.map((reel) => reel.querySelector(".symbols-strip"));
+      const spinButton = document.getElementById("spinButton");
+      const stopButton = document.getElementById("stopButton");
+      const slowButton = document.getElementById("slowButton");
+      const creditsDisplay = document.getElementById("credits");
+      const messageDisplay = document.getElementById("message");
+      const speedDisplay = document.getElementById("speedStatus");
+      const costPreview = document.getElementById("costPreview");
+      const betInput = document.getElementById("betInput");
+
+      function initializeStrips() {
+        strips.forEach((strip) => {
+          strip.innerHTML = "";
+          for (let i = 0; i < symbols.length * 8; i++) {
+            const symbolDiv = document.createElement("div");
+            symbolDiv.className = "symbol";
+            const span = document.createElement("span");
+            span.textContent = symbols[i % symbols.length];
+            symbolDiv.appendChild(span);
+            strip.appendChild(symbolDiv);
+          }
+          strip.style.transform = "translateY(0)";
+        });
+      }
+
+      function updateCredits() {
+        creditsDisplay.textContent = `크레딧: ${credits}`;
+      }
+
+      function updateSpeedDisplay() {
+        let speedText = "보통";
+        if (currentSpeed <= SPEED_VERY_SLOW) {
+          speedText = "매우 느림";
+        } else if (currentSpeed <= SPEED_SLOW) {
+          speedText = "느림";
+        }
+        speedDisplay.textContent = `현재 속도: ${speedText}`;
+      }
+
+      function updateCostPreview() {
+        const betAmount = parseInt(betInput.value) || 0;
+        const totalCost = betAmount + speedDecreaseCost;
+
+        if (speedDecreaseCost > 0) {
+          costPreview.textContent = `예상 비용: 베팅 ${betAmount} + 속도감소 ${speedDecreaseCost} = 총 ${totalCost} 크레딧`;
+        } else {
+          costPreview.textContent = `예상 비용: ${betAmount} 크레딧`;
+        }
+      }
+
+      function animate(index) {
+        positions[index] += currentSpeed;
+
+        const totalHeight = symbols.length * 100;
+
+        if (positions[index] >= totalHeight) {
+          positions[index] = 0;
+        }
+
+        strips[index].style.transform = `translateY(${-positions[index]}px)`;
+        animationFrames[index] = requestAnimationFrame(() => animate(index));
+      }
+
+      function decreaseSpeed() {
+        if (currentSpeed <= SPEED_VERY_SLOW) {
+          messageDisplay.textContent = "이미 최저 속도입니다!";
+          return;
+        }
+
+        currentSpeed = currentSpeed / 2;
+        speedDecreaseCost += 50;
+        updateSpeedDisplay();
+        updateCostPreview();
+        messageDisplay.textContent = "다음 스핀에서 속도가 감소됩니다!";
+
+        if (currentSpeed <= SPEED_VERY_SLOW) {
+          slowButton.disabled = true;
+        }
+      }
+
+      function startSpin() {
+        const betAmount = parseInt(betInput.value);
+        const totalCost = betAmount + speedDecreaseCost;
+
+        if (isNaN(betAmount) || betAmount < 100) {
+          messageDisplay.textContent = "최소 베팅 금액은 100 크레딧입니다!";
+          return;
+        }
+
+        if (credits < totalCost) {
+          messageDisplay.textContent = "크레딧이 부족합니다!";
+          return;
+        }
+
+        credits -= totalCost;
+        updateCredits();
+        messageDisplay.textContent = "정지 버튼을 눌러 릴을 멈춰주세요!";
+        isSpinning = true;
+        nextStopIndex = 0;
+        currentBet = betAmount;
+
+        speedDecreaseCost = 0;
+        updateCostPreview();
+
+        spinButton.disabled = true;
+        stopButton.disabled = false;
+        slowButton.disabled = true;
+        betInput.disabled = true;
+
+        positions = [0, 0, 0];
+        reels.forEach((reel, index) => {
+          if (index === 0) {
+            reel.classList.add("spinning");
+          }
+          animationFrames[index] = requestAnimationFrame(() => animate(index));
+        });
+      }
+
+      function stopNextReel() {
+        if (nextStopIndex >= 3) return;
+
+        const currentReel = nextStopIndex;
+        cancelAnimationFrame(animationFrames[currentReel]);
+        reels[currentReel].classList.remove("spinning");
+
+        const symbolHeight = 100;
+        const currentPos = positions[currentReel];
+        const nearestSymbol =
+          Math.round(currentPos / symbolHeight) * symbolHeight;
+
+        strips[currentReel].style.transition = "transform 0.2s ease-out";
+        strips[currentReel].style.transform = `translateY(${-nearestSymbol}px)`;
+        positions[currentReel] = nearestSymbol;
+
+        setTimeout(() => {
+          strips[currentReel].style.transition = "";
+        }, 200);
+
+        nextStopIndex++;
+
+        if (nextStopIndex < 3) {
+          reels[nextStopIndex].classList.add("spinning");
+        }
+
+        if (nextStopIndex >= 3) {
+          isSpinning = false;
+          stopButton.disabled = true;
+          spinButton.disabled = false;
+          slowButton.disabled = false;
+          betInput.disabled = false;
+          currentSpeed = SPEED_NORMAL;
+          updateSpeedDisplay();
+          setTimeout(checkWin, 200);
+        }
+      }
+
+      function getVisibleSymbols() {
+        return positions.map((pos) => {
+          const symbolIndex = Math.round(pos / 100) % symbols.length;
+          return symbols[symbolIndex];
+        });
+      }
+
+      function checkWin() {
+        const results = getVisibleSymbols();
+        const multiplier = currentBet / 100;
+
+        if (results[0] === "7" && results[1] === "7" && results[2] === "7") {
+          const winAmount = Math.floor(5000 * multiplier);
+          credits += winAmount;
+          messageDisplay.textContent = `잭팟! ${winAmount} 크레딧 획득!`;
+        } else if (results[0] === results[1] && results[1] === results[2]) {
+          const winAmount = Math.floor(1000 * multiplier);
+          credits += winAmount;
+          messageDisplay.textContent = `3개 일치! ${winAmount} 크레딧 획득!`;
+        } else if (
+          results[0] === results[1] ||
+          results[1] === results[2] ||
+          results[0] === results[2]
+        ) {
+          const winAmount = Math.floor(200 * multiplier);
+          credits += winAmount;
+          messageDisplay.textContent = `2개 일치! ${winAmount} 크레딧 획득!`;
+        } else {
+          messageDisplay.textContent = "아쉽네요! 다시 도전하세요.";
+        }
+
+        updateCredits();
+      }
+
+      betInput.addEventListener("input", updateCostPreview);
+      spinButton.addEventListener("click", startSpin);
+      stopButton.addEventListener("click", stopNextReel);
+      slowButton.addEventListener("click", decreaseSpeed);
+
+      // 초기화
+      initializeStrips();
+      updateSpeedDisplay();
+      updateCostPreview();
+    </script>
+  </body>
+</html>
