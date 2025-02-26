@@ -14,9 +14,10 @@ const currentTurnDisplay = document.querySelector(".current-turn");
 const playerScoreDisplay = document.getElementById("player-score");
 const computerScoreDisplay = document.getElementById("computer-score");
 const difficultySelector = document.getElementById("difficulty");
+const bettingPoint = document.getElementById("betting-point");
 
 // 게임 설정
-const BOARD_SIZE = 15; // 15x15 오목판
+const BOARD_SIZE = 13; // 15x15 오목판
 const LINE_COLOR = "#000000";
 const BACKGROUND_COLOR = "#dcb35c";
 
@@ -30,18 +31,21 @@ let playerScore = 0;
 let computerScore = 0;
 let lastMove = null;
 let cellSize = 0;
-let currentDifficulty = "medium"; // 기본 난이도
+let currentDifficulty = "master"; // 기본 난이도
 let winningStones = []; // 승리 시 강조할 돌의 위치
 
 // 인트로 화면에서 게임 화면으로 전환
 function showGameScreen() {
+  // 배팅 포인트 설정
+  if (bettingPoint.value <= 0) {
+    alert("Please enter a valid betting point");
+    return;
+  }
+
   introScreen.style.display = "none";
   gameScreen.style.display = "flex";
-
   // 난이도 설정
-  currentDifficulty = difficultySelector.value;
-
-  // 게임 시작
+  currentDifficulty = difficultySelector.value; // 게임 시작
   initGame();
 }
 
@@ -49,6 +53,7 @@ function showGameScreen() {
 function returnToIntro() {
   gameScreen.style.display = "none";
   introScreen.style.display = "flex";
+  lastMove = null;
 
   // 게임 종료 (타이머 정지 등)
   if (gameActive) {
@@ -83,7 +88,7 @@ function initGame() {
 
   // UI 업데이트
   updateTurnDisplay();
-  timerDisplay.textContent = `남은 시간: ${timeLeft}초`;
+  timerDisplay.textContent = `Time Left: ${timeLeft}s`;
   timerDisplay.style.color = "#333";
 
   // 게임 오버 패널 숨기기
@@ -121,7 +126,7 @@ function drawBoard() {
   }
 
   // 화점 그리기 (오목의 전통적인 위치)
-  const dots = [3, 7, 11];
+  const dots = [3, 6, 9];
   ctx.fillStyle = "#000";
 
   for (let i of dots) {
@@ -209,7 +214,7 @@ function startTimer() {
 
   timerId = setInterval(() => {
     timeLeft--;
-    timerDisplay.textContent = `남은 시간: ${timeLeft}초`;
+    timerDisplay.textContent = `Time Left: ${timeLeft}s`;
 
     if (timeLeft <= 10) {
       timerDisplay.style.color = "#e74c3c";
@@ -227,7 +232,7 @@ function startTimer() {
 // 타이머 재설정
 function resetTimer() {
   timeLeft = 30;
-  timerDisplay.textContent = `남은 시간: ${timeLeft}초`;
+  timerDisplay.textContent = `Time Left: ${timeLeft}s`;
   timerDisplay.style.color = "#333";
   clearInterval(timerId);
   startTimer();
@@ -244,22 +249,22 @@ function gameOver(reason) {
     // 현재 플레이어가 1(사용자)이면 사용자가 이긴 것이고, 2(컴퓨터)면 컴퓨터가 이긴 것입니다.
     if (currentPlayer === 1) {
       // 사용자가 이김
-      resultMessage = "사용자 승리!";
+      resultMessage += "You Win!";
       playerScore++;
     } else {
       // 컴퓨터가 이김
-      resultMessage = "컴퓨터 승리!";
+      resultMessage += "AI Win!";
       computerScore++;
     }
   } else if (reason === "timeout") {
-    resultMessage = "시간 초과!";
+    resultMessage = "Time Over!";
     if (currentPlayer === 1) {
       computerScore++;
     } else {
       playerScore++;
     }
   } else if (reason === "draw") {
-    resultMessage = "무승부!";
+    resultMessage = "Draw!";
   }
 
   // 점수 업데이트
@@ -272,13 +277,13 @@ function gameOver(reason) {
     setTimeout(() => {
       // 게임 오버 화면 표시
       gameResultDisplay.textContent = resultMessage;
-      finalScoreDisplay.textContent = `최종 점수: 사용자 ${playerScore} - 컴퓨터 ${computerScore}`;
+      finalScoreDisplay.textContent = `Final Score: You ${playerScore} - AI ${computerScore} \n Betting Point: ${bettingPoint.value}`;
       gameOverPanel.style.display = "flex";
     }, 1200); // 승리 애니메이션을 보여줄 시간
   } else {
     // 즉시 게임 오버 화면 표시
     gameResultDisplay.textContent = resultMessage;
-    finalScoreDisplay.textContent = `최종 점수: 사용자 ${playerScore} - 컴퓨터 ${computerScore}`;
+    finalScoreDisplay.textContent = `Final Score: You ${playerScore} - AI ${computerScore} \n Betting Point: ${bettingPoint.value}`;
     gameOverPanel.style.display = "flex";
   }
 }
@@ -407,9 +412,9 @@ function finishMove(x, y) {
 // 턴 표시 업데이트
 function updateTurnDisplay() {
   if (currentPlayer === 1) {
-    currentTurnDisplay.textContent = "사용자 차례";
+    currentTurnDisplay.textContent = "Your Turn";
   } else {
-    currentTurnDisplay.textContent = "컴퓨터 차례";
+    currentTurnDisplay.textContent = "AI's Turn";
   }
 }
 
