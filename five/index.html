@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>모바일 오목 게임</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- 인트로 화면 -->
+    <div class="intro-screen">
+      <h1>모바일 오목 게임</h1>
+      <div class="difficulty-selector">
+        <label for="difficulty">난이도 선택: </label>
+        <select id="difficulty">
+          <option value="easy">쉬움</option>
+          <option value="medium" selected>보통</option>
+          <option value="hard">어려움</option>
+          <option value="expert">전문가</option>
+          <option value="master" selected>마스터</option>
+        </select>
+      </div>
+      <button id="start-button">게임 시작</button>
+    </div>
+
+    <!-- 게임 화면 -->
+    <div class="game-screen" style="display: none">
+      <div class="info-panel">
+        <div class="timer">남은 시간: 30초</div>
+        <div class="score">
+          <div class="player player1">
+            <div class="player-stone"></div>
+            <span>사용자: <span id="player-score">0</span></span>
+          </div>
+          <div class="player player2">
+            <div class="player-stone"></div>
+            <span>컴퓨터: <span id="computer-score">0</span></span>
+          </div>
+        </div>
+        <div class="current-turn">사용자 차례</div>
+      </div>
+
+      <div class="game-container">
+        <canvas id="gomoku-board"></canvas>
+        <div class="game-over">
+          <div class="game-result">게임 종료!</div>
+          <div class="final-score">최종 점수: 사용자 0 - 컴퓨터 0</div>
+          <div class="buttons">
+            <button id="restart-button">다시 시작</button>
+            <button id="home-button">메인 화면</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
