@@ -1,0 +1,128 @@
+body {
+  font-family: Arial, sans-serif;
+  text-align: center;
+  background-color: #f0f0f0;
+  margin: 0;
+  padding: 20px;
+}
+.game-container {
+  max-width: 600px;
+  margin: 0 auto;
+  background-color: white;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 4px;
+  margin: 20px auto;
+  width: 100%;
+  max-width: 500px;
+}
+.tile {
+  aspect-ratio: 1/1;
+  background-color: #e6f7ff;
+  border: 2px solid #91d5ff;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  transition: all 0.2s;
+}
+.tile:hover {
+  background-color: #bae7ff;
+}
+.selected {
+  background-color: #ffd591;
+  border-color: #fa8c16;
+}
+.tile.matched {
+  visibility: hidden;
+}
+.empty {
+  background-color: transparent;
+  border-color: transparent;
+  cursor: default;
+}
+.line {
+  position: absolute;
+  background-color: #1890ff;
+  z-index: 10;
+  pointer-events: none;
+}
+.info {
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-between;
+}
+.message {
+  margin-top: 10px;
+  min-height: 24px;
+  color: #389e0d;
+  font-weight: bold;
+}
+button {
+  background-color: #1890ff;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  margin: 10px;
+  transition: all 0.3s;
+}
+button:hover {
+  background-color: #096dd9;
+  transform: translateY(-2px);
+}
+.start-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+.game-screen {
+  display: none;
+}
+.end-screen {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  animation: fadeIn 1s;
+}
+.score {
+  font-size: 24px;
+  margin: 20px 0;
+  color: #1890ff;
+  font-weight: bold;
+}
+.title {
+  font-size: 36px;
+  color: #1890ff;
+  margin-bottom: 20px;
+}
+.subtitle {
+  font-size: 18px;
+  color: #666;
+  margin-bottom: 30px;
+}
+.big-button {
+  font-size: 20px;
+  padding: 15px 30px;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

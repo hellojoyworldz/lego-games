@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>사천성 게임</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="game-container">
+      <!-- 시작 화면 -->
+      <div id="start-screen" class="start-screen">
+        <h1 class="title">사천성 게임</h1>
+        <p class="subtitle">같은 그림의 타일을 찾아 연결하세요!</p>
+        <button id="start-button" class="big-button">게임 시작</button>
+      </div>
+
+      <!-- 게임 화면 -->
+      <div id="game-screen" class="game-screen">
+        <h1>사천성 게임</h1>
+        <p>
+          같은 그림의 타일 두 개를 최대 세 개의 직선으로 연결하여 제거하세요.
+        </p>
+        <div class="board" id="board"></div>
+        <div class="info">
+          <div>남은 타일: <span id="tiles-left">0</span></div>
+          <div>시간: <span id="timer">0</span>초</div>
+        </div>
+        <div class="message" id="message"></div>
+      </div>
+
+      <!-- 종료 화면 -->
+      <div id="end-screen" class="end-screen">
+        <h1 class="title">게임 종료!</h1>
+        <div class="score" id="final-score">점수: 0</div>
+        <p id="time-result">소요 시간: 0초</p>
+        <button id="play-again" class="big-button">새 게임</button>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
