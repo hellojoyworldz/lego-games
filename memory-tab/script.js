@@ -1,20 +1,24 @@
 // 상수
 const GRID_SIZE = 5;
-const GAME_TIME = 120;
 const SHOW_INTERVAL = 150;
 const VISIBLE_DURATION = 200;
 const DARKEN_CORRECT = true; // 정답 클릭한 캐릭터 어둡게 표시 여부
 const HINT_ENABLED = true; // 힌트(파란 원) 표시 여부
+const BASE_TIME = 20; // 기본 시간(초)
+const TIME_PENALTY = 5; // 틀릴 때 감소(초)
+const TIME_REWARD = 3; // 맞출 때 증가(초)
+const MAX_TIME = 60; // 최대 시간(초)
 
 // 상태 변수
 let level = 1,
-  timer = GAME_TIME,
+  timer = BASE_TIME,
   intervalId,
   pattern = [],
   userInput = [],
   correctCount = 0,
   totalCount = 0,
-  playing = false;
+  playing = false,
+  point = 0;
 
 // DOM
 const intro = document.getElementById("intro");
@@ -30,6 +34,8 @@ const restartBtn = document.getElementById("restartBtn");
 const shareBtn = document.getElementById("shareBtn");
 const successSound = document.getElementById("successSound");
 const failSound = document.getElementById("failSound");
+const pointSpan = document.getElementById("point");
+const finalPoint = document.getElementById("finalPoint");
 
 // 타일 생성
 function createGrid() {
@@ -143,10 +149,18 @@ function onTileClick(e) {
 
   showHint(); // 힌트 갱신
 
+  // 정답 클릭 시 포인트 증가
+  if (pattern[userInput.length - 1] === idx) {
+    point += level * 1;
+    pointSpan.textContent = point;
+  }
+
   // 틀린 입력 즉시 처리
   if (pattern[userInput.length - 1] !== idx) {
     playing = false;
     totalCount++;
+    timer = Math.max(timer - TIME_PENALTY, 0); // 시간 감소
+    updateTimerDisplay();
     e.currentTarget.classList.add("wrong");
     failSound.play();
     setTimeout(() => {
@@ -165,6 +179,8 @@ function onTileClick(e) {
   if (userInput.length === pattern.length) {
     playing = false;
     correctCount++;
+    timer = Math.min(timer + TIME_REWARD, MAX_TIME); // 시간 증가
+    updateTimerDisplay();
     successSound.play();
     setTimeout(() => {
       hideAllCharacters();
@@ -193,15 +209,20 @@ function startLevel() {
 
 // 타이머
 function startTimer() {
-  timer = GAME_TIME;
-  timerSpan.textContent = "2:00";
+  timer = BASE_TIME;
+  updateTimerDisplay();
+  clearInterval(intervalId);
   intervalId = setInterval(() => {
     timer--;
-    const m = Math.floor(timer / 60);
-    const s = String(timer % 60).padStart(2, "0");
-    timerSpan.textContent = `${m}:${s}`;
+    updateTimerDisplay();
     if (timer <= 0) endGame();
   }, 1000);
+}
+
+function updateTimerDisplay() {
+  const m = Math.floor(timer / 60);
+  const s = String(timer % 60).padStart(2, "0");
+  timerSpan.textContent = `${m}:${s}`;
 }
 
 // 게임 시작
@@ -212,6 +233,8 @@ function startGame() {
   level = 1;
   correctCount = 0;
   totalCount = 0;
+  point = 0;
+  pointSpan.textContent = point;
   levelSpan.textContent = level;
   createGrid();
   startLevel();
@@ -227,6 +250,7 @@ function endGame() {
   accuracy.textContent = totalCount
     ? Math.round((correctCount / totalCount) * 100)
     : 0;
+  finalPoint.textContent = point;
 }
 
 // 이벤트
