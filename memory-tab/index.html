@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0"
+    />
+    <title>순서기억하기 게임</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- 인트로 화면 -->
+    <div id="intro" class="screen">
+      <h1>순서기억하기</h1>
+      <p>캐릭터가 등장한 순서를 기억해서<br />정확히 눌러보세요!</p>
+      <button id="startBtn">게임 시작하기</button>
+    </div>
+
+    <!-- 게임 화면 -->
+    <div id="game" class="screen hidden">
+      <div class="game-header">
+        <div>LEVEL <span id="level">1</span></div>
+        <div>TIME <span id="timer">2:00</span></div>
+      </div>
+      <div id="grid" class="grid"></div>
+    </div>
+
+    <!-- 결과 화면 -->
+    <div id="result" class="screen hidden">
+      <h2>게임 종료!</h2>
+      <p>최종 레벨: <span id="finalLevel"></span></p>
+      <p>정답률: <span id="accuracy"></span>%</p>
+      <button id="restartBtn">다시 시작</button>
+      <button id="shareBtn">공유하기</button>
+    </div>
+
+    <audio
+      id="successSound"
+      src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae1e2.mp3"
+    ></audio>
+    <audio
+      id="failSound"
+      src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae1e2.mp3"
+    ></audio>
+    <script src="script.js"></script>
+  </body>
+</html>
