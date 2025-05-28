@@ -31,7 +31,7 @@ let playerScore = 0;
 let computerScore = 0;
 let lastMove = null;
 let cellSize = 0;
-let currentDifficulty = "master"; // 기본 난이도
+let currentDifficulty = "ultraMaster"; // 기본 난이도
 let winningStones = []; // 승리 시 강조할 돌의 위치
 
 // 인트로 화면에서 게임 화면으로 전환
@@ -44,8 +44,11 @@ function showGameScreen() {
 
   introScreen.style.display = "none";
   gameScreen.style.display = "flex";
+
   // 난이도 설정
-  currentDifficulty = difficultySelector.value; // 게임 시작
+  currentDifficulty = difficultySelector.value;
+
+  // 게임 시작
   initGame();
 }
 
@@ -81,8 +84,8 @@ function initGame() {
     .map(() => Array(BOARD_SIZE).fill(0));
 
   // 게임 상태 초기화
-  currentPlayer = 1;
-  timeLeft = 30;
+  currentPlayer = 2;
+  timeLeft = 20;
   gameActive = true;
   winningStones = [];
 
@@ -99,6 +102,13 @@ function initGame() {
 
   // 보드 그리기
   drawBoard();
+
+  // AI가 선공이므로 AI 턴 실행 (시간 지연 추가)
+  if (currentPlayer === 2 && gameActive) {
+    setTimeout(function () {
+      computerMove();
+    }, 1000);
+  }
 }
 
 // 보드 그리기
@@ -231,7 +241,7 @@ function startTimer() {
 
 // 타이머 재설정
 function resetTimer() {
-  timeLeft = 30;
+  timeLeft = 20;
   timerDisplay.textContent = `Time Left: ${timeLeft}s`;
   timerDisplay.style.color = "#333";
   clearInterval(timerId);
@@ -469,6 +479,9 @@ function computerMove() {
       break;
     case "master":
       masterAI();
+      break;
+    case "ultraMaster":
+      ultraMasterAI();
       break;
     default:
       mediumAI();
@@ -1223,45 +1236,76 @@ function masterAI() {
     }
   }
 
-  // 1. 공격 패턴: 4개 연속 돌을 찾아 승리 기회 노리기
-  if (findConsecutiveStones(2, 4)) return;
+  // 1. 승리 가능한 위치 찾기 (5개 완성) - 이미 원래 코드에서 구현됨
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (board[y][x] === 0) {
+        // 빈 위치인지 확인
+        board[y][x] = 2;
+        if (checkWin(y, x)) {
+          lastMove = { x, y };
+          return finishMove(x, y);
+        }
+        board[y][x] = 0;
+      }
+    }
+  }
 
-  // 2. 방어 패턴: 상대방의 4개 연속 돌 방어하기
-  if (findConsecutiveStones(1, 4)) return;
+  // 2. 사용자의 즉시 승리를 방어 - 이미 원래 코드에서 구현됨
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (board[y][x] === 0) {
+        // 빈 위치인지 확인
+        board[y][x] = 1;
+        if (checkWin(y, x)) {
+          board[y][x] = 2;
+          lastMove = { x, y };
+          return finishMove(x, y);
+        }
+        board[y][x] = 0;
+      }
+    }
+  }
 
-  // 3. 공격 패턴: 양쪽이 열린 3 만들기
-  if (findDoubleOpenThree(2)) return;
+  // 3. 사용자의 3-3 패턴 차단 (새로 추가된 기능)
+  const threethreePosition = findThreeThreePattern();
+  if (threethreePosition) {
+    const { x, y } = threethreePosition;
+    board[y][x] = 2;
+    lastMove = { x, y };
+    return finishMove(x, y);
+  }
 
-  // 4. 방어 패턴: 상대방의 양쪽이 열린 3 방어하기
-  if (findDoubleOpenThree(1)) return;
+  // 4. 공격 패턴: 4개 연속 돌을 찾아 승리 기회 노리기
+  if (findFourInRow(2)) return;
 
-  // 5. 공격 패턴: 한쪽이 열린 3 만들기
-  if (findSingleOpenThree(2)) return;
+  // 5. 방어 패턴: 상대방의 4개 연속 돌 방어하기
+  if (findFourInRow(1)) return;
 
-  // 6. 방어 패턴: 상대방의 한쪽이 열린 3 방어하기
-  if (findSingleOpenThree(1)) return;
+  // 6. 열린 3 (both sides open) 만들기 (공격)
+  if (findOpenThree(2)) return;
 
-  // 7. 공격 패턴: 잠재적인 열린 3 패턴 만들기 (2-1-2 패턴)
-  if (createPotentialOpenThree()) return;
+  // 7. 상대방의 열린 3 방어하기
+  if (findOpenThree(1)) return;
 
-  // 8. 공격 패턴: 양방향 2 만들기 (잠재적인 열린 3 패턴의 기초)
-  if (createDoubleTwoPattern()) return;
-
-  // 9. 3개 연속 돌 확장하기
+  // 8. 3개 연속 돌 확장하기 (공격)
   if (extendThreeInRow(2)) return;
 
-  // 10. 상대방의 3개 연속 돌 방어하기
+  // 9. 상대방의 3개 연속 돌 방어하기
   if (extendThreeInRow(1)) return;
 
-  // 11. 전략적 위치에 놓기 (개선된 버전)
-  if (playAdvancedStrategicPosition()) return;
+  // 10. 2개 연속 돌 확장하기 (공격)
+  if (extendTwoInRow(2)) return;
 
-  // 마지막 수단으로 expertAI 사용
-  expertAI();
+  // 11. 전략적 포지션에 두기
+  if (playStrategicPosition()) return;
+
+  // 마지막 수단으로 하드 AI 사용
+  hardAI();
 }
 
-// 특정 개수의 연속된 돌 찾기 (N-in-a-row)
-function findConsecutiveStones(player, targetCount) {
+// 3-3 패턴을 찾는 함수 (새로 추가)
+function findThreeThreePattern() {
   const directions = [
     [0, 1], // 수평
     [1, 0], // 수직
@@ -1269,568 +1313,549 @@ function findConsecutiveStones(player, targetCount) {
     [1, -1], // 대각선 (왼쪽 아래 -> 오른쪽 위)
   ];
 
+  // 모든 빈 위치 검사
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
-      if (board[y][x] === player) {
-        for (const [dx, dy] of directions) {
-          // 해당 방향으로 연속된 돌 확인
-          let count = 1;
-          let stones = [{ x, y }];
+      if (board[y][x] !== 0) continue; // 빈 위치만 검사
 
-          // 양방향으로 확인
-          for (let dir = -1; dir <= 1; dir += 2) {
-            if (dir === 0) continue;
+      // 이 위치에 임시로 사용자 돌을 놓아봄
+      board[y][x] = 1;
 
-            for (let i = 1; i < 5; i++) {
-              const nx = x + dx * i * dir;
-              const ny = y + dy * i * dir;
+      // 열린 3이 형성되는 방향 카운트
+      let openThreeCount = 0;
 
-              if (
-                nx >= 0 &&
-                nx < BOARD_SIZE &&
-                ny >= 0 &&
-                ny < BOARD_SIZE &&
-                board[ny][nx] === player
-              ) {
-                count++;
-                stones.push({ x: nx, y: ny });
-              } else {
-                break;
-              }
-            }
-          }
-
-          if (count === targetCount) {
-            // 양 끝에 빈 공간이 있는지 확인
-            let endPositions = [];
-
-            // 돌의 최소/최대 좌표 계산
-            let minX = BOARD_SIZE,
-              minY = BOARD_SIZE,
-              maxX = -1,
-              maxY = -1;
-            for (const stone of stones) {
-              minX = Math.min(minX, stone.x);
-              minY = Math.min(minY, stone.y);
-              maxX = Math.max(maxX, stone.x);
-              maxY = Math.max(maxY, stone.y);
-            }
-
-            // 양 끝 위치 계산
-            let end1X, end1Y, end2X, end2Y;
-
-            if (dx === 0) {
-              // 수직
-              end1X = minX;
-              end1Y = minY - 1;
-              end2X = maxX;
-              end2Y = maxY + 1;
-            } else if (dy === 0) {
-              // 수평
-              end1X = minX - 1;
-              end1Y = minY;
-              end2X = maxX + 1;
-              end2Y = maxY;
-            } else if (dx === 1 && dy === 1) {
-              // 대각선 (왼쪽 위 -> 오른쪽 아래)
-              end1X = minX - 1;
-              end1Y = minY - 1;
-              end2X = maxX + 1;
-              end2Y = maxY + 1;
-            } else {
-              // 대각선 (왼쪽 아래 -> 오른쪽 위)
-              end1X = minX - 1;
-              end1Y = maxY + 1;
-              end2X = maxX + 1;
-              end2Y = minY - 1;
-            }
-
-            // 양 끝 위치가 유효한지 확인
-            if (
-              end1X >= 0 &&
-              end1X < BOARD_SIZE &&
-              end1Y >= 0 &&
-              end1Y < BOARD_SIZE &&
-              board[end1Y][end1X] === 0
-            ) {
-              endPositions.push({ x: end1X, y: end1Y });
-            }
-
-            if (
-              end2X >= 0 &&
-              end2X < BOARD_SIZE &&
-              end2Y >= 0 &&
-              end2Y < BOARD_SIZE &&
-              board[end2Y][end2X] === 0
-            ) {
-              endPositions.push({ x: end2X, y: end2Y });
-            }
-
-            if (endPositions.length > 0) {
-              const position =
-                endPositions[Math.floor(Math.random() * endPositions.length)];
-              board[position.y][position.x] = 2; // 컴퓨터의 돌
-              lastMove = position;
-              finishMove(position.x, position.y);
-              return true;
-            }
-          }
+      // 각 방향에서 열린 3이 있는지 확인
+      for (const [dx, dy] of directions) {
+        if (isOpenThree(x, y, dx, dy, 1)) {
+          openThreeCount++;
         }
+      }
+
+      // 원래대로 돌려놓기
+      board[y][x] = 0;
+
+      // 두 방향 이상에서 열린 3이 형성되면 (3-3 패턴) 이 위치 반환
+      if (openThreeCount >= 2) {
+        return { x, y };
       }
     }
   }
 
-  return false;
+  return null;
 }
 
-// 양쪽이 열린 3 (더블 오픈 쓰리) 찾기 및 처리
-function findDoubleOpenThree(player) {
-  const directions = [
-    [0, 1], // 수평
-    [1, 0], // 수직
-    [1, 1], // 대각선 (왼쪽 위 -> 오른쪽 아래)
-    [1, -1], // 대각선 (왼쪽 아래 -> 오른쪽 위)
-  ];
+// 열린 3 패턴 확인 함수 (새로 추가)
+function isOpenThree(x, y, dx, dy, player) {
+  // 해당 방향으로 연속된 돌의 수 계산
+  let count = 1; // 현재 위치 포함
+  let leftOpen = true;
+  let rightOpen = true;
 
-  for (let y = 0; y < BOARD_SIZE; y++) {
-    for (let x = 0; x < BOARD_SIZE; x++) {
-      if (board[y][x] === player) {
-        for (const [dx, dy] of directions) {
-          // 패턴 확인: _OOO_
-          let count = 1;
-          let leftOpen = false;
-          let rightOpen = false;
+  // 왼쪽 방향 확인
+  for (let i = 1; i <= 2; i++) {
+    const nx = x - dx * i;
+    const ny = y - dy * i;
 
-          // 양방향 확인
-          // 오른쪽 방향 확인
-          for (let i = 1; i <= 2; i++) {
-            const nx = x + dx * i;
-            const ny = y + dy * i;
-
-            if (
-              nx >= 0 &&
-              nx < BOARD_SIZE &&
-              ny >= 0 &&
-              ny < BOARD_SIZE &&
-              board[ny][nx] === player
-            ) {
-              count++;
-            } else {
-              break;
-            }
-          }
-
-          // 오른쪽 끝이 비어있는지 확인
-          const rightX = x + dx * 3;
-          const rightY = y + dy * 3;
-
-          if (
-            rightX >= 0 &&
-            rightX < BOARD_SIZE &&
-            rightY >= 0 &&
-            rightY < BOARD_SIZE &&
-            board[rightY][rightX] === 0
-          ) {
-            rightOpen = true;
-          }
-
-          // 왼쪽 방향 확인
-          const leftX = x - dx;
-          const leftY = y - dy;
-
-          if (
-            leftX >= 0 &&
-            leftX < BOARD_SIZE &&
-            leftY >= 0 &&
-            leftY < BOARD_SIZE &&
-            board[leftY][leftX] === 0
-          ) {
-            leftOpen = true;
-          }
-
-          // 양쪽이 열린 3이면 막거나 만들기
-          if (count === 3 && leftOpen && rightOpen) {
-            // 끝에 돌 두기 (랜덤으로 선택)
-            const positions = [];
-
-            if (rightOpen) {
-              positions.push({ x: rightX, y: rightY });
-            }
-
-            if (leftOpen) {
-              positions.push({ x: leftX, y: leftY });
-            }
-
-            if (positions.length > 0) {
-              const position =
-                positions[Math.floor(Math.random() * positions.length)];
-              board[position.y][position.x] = 2; // 컴퓨터의 돌
-              lastMove = position;
-              finishMove(position.x, position.y);
-              return true;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return false;
-}
-
-// 한쪽이 열린 3 (싱글 오픈 쓰리) 찾기 및 처리
-function findSingleOpenThree(player) {
-  const directions = [
-    [0, 1], // 수평
-    [1, 0], // 수직
-    [1, 1], // 대각선 (왼쪽 위 -> 오른쪽 아래)
-    [1, -1], // 대각선 (왼쪽 아래 -> 오른쪽 위)
-  ];
-
-  for (let y = 0; y < BOARD_SIZE; y++) {
-    for (let x = 0; x < BOARD_SIZE; x++) {
-      if (board[y][x] === player) {
-        for (const [dx, dy] of directions) {
-          let pattern1 = checkPattern(x, y, dx, dy, player, [1, 1, 1, 0]); // OOO_
-          let pattern2 = checkPattern(x, y, dx, dy, player, [0, 1, 1, 1]); // _OOO
-
-          if (pattern1.match) {
-            const pos = {
-              x: pattern1.positions[3].x,
-              y: pattern1.positions[3].y,
-            };
-            board[pos.y][pos.x] = 2; // 컴퓨터의 돌
-            lastMove = pos;
-            finishMove(pos.x, pos.y);
-            return true;
-          }
-
-          if (pattern2.match) {
-            const pos = {
-              x: pattern2.positions[0].x,
-              y: pattern2.positions[0].y,
-            };
-            board[pos.y][pos.x] = 2; // 컴퓨터의 돌
-            lastMove = pos;
-            finishMove(pos.x, pos.y);
-            return true;
-          }
-        }
-      }
-    }
-  }
-
-  return false;
-}
-
-// 패턴 체크 유틸리티 함수
-function checkPattern(startX, startY, dx, dy, player, pattern) {
-  let positions = [];
-  let match = true;
-
-  for (let i = 0; i < pattern.length; i++) {
-    const x = startX + dx * i;
-    const y = startY + dy * i;
-
-    positions.push({ x, y });
-
-    if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) {
-      match = false;
+    if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) {
+      leftOpen = false;
       break;
     }
 
-    const expected = pattern[i] === 1 ? player : 0;
-    if (board[y][x] !== expected) {
-      match = false;
-      break;
-    }
-  }
-
-  return { match, positions };
-}
-
-// 잠재적인 열린 3 패턴 만들기 (2-1-2 패턴)
-function createPotentialOpenThree() {
-  const directions = [
-    [0, 1], // 수평
-    [1, 0], // 수직
-    [1, 1], // 대각선 (왼쪽 위 -> 오른쪽 아래)
-    [1, -1], // 대각선 (왼쪽 아래 -> 오른쪽 위)
-  ];
-
-  for (let y = 0; y < BOARD_SIZE; y++) {
-    for (let x = 0; x < BOARD_SIZE; x++) {
-      if (board[y][x] === 0) {
-        // 빈 위치를 탐색
-        for (const [dx, dy] of directions) {
-          // 패턴 확인: OO_OO (중앙에 돌을 놓아 OOO_OO 패턴 만들기)
-          const pattern1 = [2, 2, 0, 2, 2]; // 컴퓨터의 패턴
-          let match = true;
-
-          for (let i = -2; i <= 2; i++) {
-            if (i === 0) continue; // 현재 위치 스킵
-
-            const nx = x + dx * i;
-            const ny = y + dy * i;
-
-            if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) {
-              match = false;
-              break;
-            }
-
-            const patternIndex = i + 2;
-            if (board[ny][nx] !== pattern1[patternIndex]) {
-              match = false;
-              break;
-            }
-          }
-
-          if (match) {
-            board[y][x] = 2; // 컴퓨터의 돌
-            lastMove = { x, y };
-            finishMove(x, y);
-            return true;
-          }
-        }
-      }
-    }
-  }
-
-  return false;
-}
-
-// 양방향 2 패턴 만들기 (더블 투)
-function createDoubleTwoPattern() {
-  // 두 방향에서 동시에 2개 연속 돌을 만들 수 있는 위치 찾기
-  for (let y = 0; y < BOARD_SIZE; y++) {
-    for (let x = 0; x < BOARD_SIZE; x++) {
-      if (board[y][x] === 0) {
-        const directionPairs = [
-          [
-            [0, 1],
-            [1, 0],
-          ], // 수평 + 수직
-          [
-            [0, 1],
-            [1, 1],
-          ], // 수평 + 대각선 (왼쪽 위 -> 오른쪽 아래)
-          [
-            [0, 1],
-            [1, -1],
-          ], // 수평 + 대각선 (왼쪽 아래 -> 오른쪽 위)
-          [
-            [1, 0],
-            [1, 1],
-          ], // 수직 + 대각선 (왼쪽 위 -> 오른쪽 아래)
-          [
-            [1, 0],
-            [1, -1],
-          ], // 수직 + 대각선 (왼쪽 아래 -> 오른쪽 위)
-          [
-            [1, 1],
-            [1, -1],
-          ], // 대각선 + 대각선
-        ];
-
-        for (const [dir1, dir2] of directionPairs) {
-          let count1 = countStonesInDirection(x, y, dir1[0], dir1[1], 2);
-          let count2 = countStonesInDirection(x, y, dir2[0], dir2[1], 2);
-
-          if (count1 >= 2 && count2 >= 2) {
-            board[y][x] = 2; // 컴퓨터의 돌
-            lastMove = { x, y };
-            finishMove(x, y);
-            return true;
-          }
-        }
-      }
-    }
-  }
-
-  return false;
-}
-
-// 주어진 방향으로 돌 개수 세기
-function countStonesInDirection(x, y, dx, dy, player) {
-  // 주어진 위치에 돌을 놓았을 때 형성되는 연속된 돌 개수
-  let count = 1; // 현재 위치에 가상으로 돌을 놓음
-
-  // 양방향 확인
-  for (let dir = -1; dir <= 1; dir += 2) {
-    for (let i = 1; i < 5; i++) {
-      const nx = x + dx * i * dir;
-      const ny = y + dy * i * dir;
+    if (board[ny][nx] === player) {
+      count++;
+    } else if (board[ny][nx] === 0) {
+      // 한 칸 더 확인하여 진짜로 열려있는지 확인
+      const nx2 = nx - dx;
+      const ny2 = ny - dy;
 
       if (
-        nx >= 0 &&
-        nx < BOARD_SIZE &&
-        ny >= 0 &&
-        ny < BOARD_SIZE &&
-        board[ny][nx] === player
+        nx2 < 0 ||
+        nx2 >= BOARD_SIZE ||
+        ny2 < 0 ||
+        ny2 >= BOARD_SIZE ||
+        board[ny2][nx2] !== 0
       ) {
-        count++;
-      } else {
-        break;
+        leftOpen = false;
       }
+      break;
+    } else {
+      leftOpen = false;
+      break;
     }
   }
 
-  return count;
+  // 오른쪽 방향 확인
+  for (let i = 1; i <= 2; i++) {
+    const nx = x + dx * i;
+    const ny = y + dy * i;
+
+    if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) {
+      rightOpen = false;
+      break;
+    }
+
+    if (board[ny][nx] === player) {
+      count++;
+    } else if (board[ny][nx] === 0) {
+      // 한 칸 더 확인하여 진짜로 열려있는지 확인
+      const nx2 = nx + dx;
+      const ny2 = ny + dy;
+
+      if (
+        nx2 < 0 ||
+        nx2 >= BOARD_SIZE ||
+        ny2 < 0 ||
+        ny2 >= BOARD_SIZE ||
+        board[ny2][nx2] !== 0
+      ) {
+        rightOpen = false;
+      }
+      break;
+    } else {
+      rightOpen = false;
+      break;
+    }
+  }
+
+  // 돌이 정확히 3개이고, 양쪽이 모두 열려있으면 열린 3
+  return count === 3 && leftOpen && rightOpen;
 }
 
-// 고급 전략적 위치 선택
-function playAdvancedStrategicPosition() {
+// 마스터 난이도 AI - 최고급 전략 (향상된 버전)
+function ultraMasterAI() {
+  // 첫 수는 항상 중앙이나 중앙 근처에 두기
   const center = Math.floor(BOARD_SIZE / 2);
-  const strategicPositions = [];
+  if (board.flat().filter((cell) => cell !== 0).length < 2) {
+    if (board[center][center] === 0) {
+      board[center][center] = 2;
+      lastMove = { x: center, y: center };
+      return finishMove(center, center);
+    } else {
+      // 중앙이 이미 차 있다면 중앙 주변에 두기
+      const nearCenterPositions = [
+        { x: center - 1, y: center },
+        { x: center + 1, y: center },
+        { x: center, y: center - 1 },
+        { x: center, y: center + 1 },
+        { x: center - 1, y: center - 1 },
+        { x: center + 1, y: center + 1 },
+        { x: center - 1, y: center + 1 },
+        { x: center + 1, y: center - 1 },
+      ];
 
-  // 1. 컴퓨터 돌 주변에 놓는 것을 선호
+      for (const pos of nearCenterPositions) {
+        if (
+          pos.x >= 0 &&
+          pos.x < BOARD_SIZE &&
+          pos.y >= 0 &&
+          pos.y < BOARD_SIZE &&
+          board[pos.y][pos.x] === 0
+        ) {
+          board[pos.y][pos.x] = 2;
+          lastMove = pos;
+          return finishMove(pos.x, pos.y);
+        }
+      }
+    }
+  }
+
+  // 1. 승리 가능한 위치 찾기 (5개 완성)
   for (let y = 0; y < BOARD_SIZE; y++) {
     for (let x = 0; x < BOARD_SIZE; x++) {
-      if (board[y][x] === 2) {
-        // 컴퓨터 돌
-        // 주변 8방향 확인
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue;
-
-            const nx = x + dx;
-            const ny = y + dy;
-
-            if (
-              nx >= 0 &&
-              nx < BOARD_SIZE &&
-              ny >= 0 &&
-              ny < BOARD_SIZE &&
-              board[ny][nx] === 0
-            ) {
-              // 상대방 돌이 인접해 있는지 확인
-              let hasAdjacentOpponent = false;
-              for (let ady = -1; ady <= 1; ady++) {
-                for (let adx = -1; adx <= 1; adx++) {
-                  if (adx === 0 && ady === 0) continue;
-
-                  const anx = nx + adx;
-                  const any = ny + ady;
-
-                  if (
-                    anx >= 0 &&
-                    anx < BOARD_SIZE &&
-                    any >= 0 &&
-                    any < BOARD_SIZE &&
-                    board[any][anx] === 1
-                  ) {
-                    hasAdjacentOpponent = true;
-                    break;
-                  }
-                }
-                if (hasAdjacentOpponent) break;
-              }
-
-              // 가중치 설정 (상대방 돌이 인접해 있으면 더 높은 가중치)
-              const weight = hasAdjacentOpponent ? 10 : 5;
-              for (let i = 0; i < weight; i++) {
-                strategicPositions.push({ x: nx, y: ny });
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // 2. 상대방 돌 주변에 놓는 것도 고려 (방어 및 공격)
-  for (let y = 0; y < BOARD_SIZE; y++) {
-    for (let x = 0; x < BOARD_SIZE; x++) {
-      if (board[y][x] === 1) {
-        // 사용자 돌
-        // 주변 8방향 확인
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue;
-
-            const nx = x + dx;
-            const ny = y + dy;
-
-            if (
-              nx >= 0 &&
-              nx < BOARD_SIZE &&
-              ny >= 0 &&
-              ny < BOARD_SIZE &&
-              board[ny][nx] === 0
-            ) {
-              // 다른 상대방 돌이 인접해 있는지 확인
-              let adjacentOpponentCount = 0;
-              for (let ady = -1; ady <= 1; ady++) {
-                for (let adx = -1; adx <= 1; adx++) {
-                  if (adx === 0 && ady === 0) continue;
-
-                  const anx = nx + adx;
-                  const any = ny + ady;
-
-                  if (
-                    anx >= 0 &&
-                    anx < BOARD_SIZE &&
-                    any >= 0 &&
-                    any < BOARD_SIZE &&
-                    board[any][anx] === 1
-                  ) {
-                    adjacentOpponentCount++;
-                  }
-                }
-              }
-
-              // 인접한 상대방 돌이 많을수록 더 높은 가중치
-              const weight = 3 + adjacentOpponentCount * 2;
-              for (let i = 0; i < weight; i++) {
-                strategicPositions.push({ x: nx, y: ny });
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // 3. 중앙 부근에 놓는 것을 선호
-  for (let dy = -3; dy <= 3; dy++) {
-    for (let dx = -3; dx <= 3; dx++) {
-      const nx = center + dx;
-      const ny = center + dy;
-
-      if (
-        nx >= 0 &&
-        nx < BOARD_SIZE &&
-        ny >= 0 &&
-        ny < BOARD_SIZE &&
-        board[ny][nx] === 0
-      ) {
-        // 중앙에 가까울수록 가중치를 높게 설정
-        const distFromCenter = Math.abs(dx) + Math.abs(dy);
-        const weight = Math.max(1, 7 - distFromCenter);
-
-        for (let i = 0; i < weight; i++) {
-          strategicPositions.push({ x: nx, y: ny });
-        }
-      }
-    }
-  }
-
-  // 4. 전략적 포인트(화점) 주변에 놓는 것도 고려
-  const starPoints = [3, 7, 11];
-  for (let i = 0; i < starPoints.length; i++) {
-    for (let j = 0; j < starPoints.length; j++) {
-      const x = starPoints[i];
-      const y = starPoints[j];
-
       if (board[y][x] === 0) {
-        // 화점에 가중치 부여
-        const weight = 3;
-        for (let k = 0; k < weight; k++) {
-          strategicPositions.push({ x, y });
+        board[y][x] = 2;
+        if (checkWin(y, x)) {
+          lastMove = { x, y };
+          return finishMove(x, y);
+        }
+        board[y][x] = 0;
+      }
+    }
+  }
+
+  // 2. 사용자의 즉시 승리를 방어
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (board[y][x] === 0) {
+        board[y][x] = 1;
+        if (checkWin(y, x)) {
+          board[y][x] = 2;
+          lastMove = { x, y };
+          return finishMove(x, y);
+        }
+        board[y][x] = 0;
+      }
+    }
+  }
+
+  // 3. 투수삼목 전략 (새로 추가) - 두 개의 열린 삼목 생성 기회 찾기
+  const doubleThreatPosition = findDoubleThreatPosition();
+  if (doubleThreatPosition) {
+    const { x, y } = doubleThreatPosition;
+    board[y][x] = 2;
+    lastMove = { x, y };
+    return finishMove(x, y);
+  }
+
+  // 4. 사용자의 3-3 패턴 차단
+  const threethreePosition = findThreeThreePattern();
+  if (threethreePosition) {
+    const { x, y } = threethreePosition;
+    board[y][x] = 2;
+    lastMove = { x, y };
+    return finishMove(x, y);
+  }
+
+  // 5. 사용자의 4-3 패턴 차단 (새로 추가)
+  const fourthreePosition = findFourThreePattern();
+  if (fourthreePosition) {
+    const { x, y } = fourthreePosition;
+    board[y][x] = 2;
+    lastMove = { x, y };
+    return finishMove(x, y);
+  }
+
+  // 6. 공격: 4개 연속 돌 만들기
+  if (findFourInRow(2)) return;
+
+  // 7. 방어: 상대방의 4개 연속 돌 방어
+  if (findFourInRow(1)) return;
+
+  // 8. 은닉된 4 패턴 만들기 (새로 추가)
+  if (createHiddenFour()) return;
+
+  // 9. 열린 3 만들기
+  if (findOpenThree(2)) return;
+
+  // 10. 상대방의 열린 3 방어
+  if (findOpenThree(1)) return;
+
+  // 11. 3개 연속 돌 확장 (공격)
+  if (extendThreeInRow(2)) return;
+
+  // 12. 상대방의 3개 연속 돌 방어
+  if (extendThreeInRow(1)) return;
+
+  // 13. 2개 연속 돌 확장 (공격)
+  if (extendTwoInRow(2)) return;
+
+  // 14. 전략적 포지션 평가
+  if (playStrategicPositionAdvanced()) return;
+
+  // 15. 좋은 형태의 두수 찾기 (새로 추가)
+  if (findGoodShapeMove()) return;
+
+  // 마지막 수단으로 하드 AI 사용
+  masterAI();
+}
+
+// 투수삼목 전략 - 두 개의 열린 삼목을 동시에 만들 수 있는 위치 찾기
+function findDoubleThreatPosition() {
+  const directions = [
+    [0, 1], // 수평
+    [1, 0], // 수직
+    [1, 1], // 대각선 (왼쪽 위 -> 오른쪽 아래)
+    [1, -1], // 대각선 (왼쪽 아래 -> 오른쪽 위)
+  ];
+
+  // 모든 빈 위치 검사
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (board[y][x] !== 0) continue; // 빈 위치만 검사
+
+      // 이 위치에 임시로 컴퓨터 돌을 놓아봄
+      board[y][x] = 2;
+
+      // 열린 3이 형성되는 방향 카운트
+      let openThreeCount = 0;
+
+      // 각 방향에서 열린 3이 있는지 확인
+      for (const [dx, dy] of directions) {
+        if (isOpenThree(x, y, dx, dy, 2)) {
+          openThreeCount++;
         }
       }
 
-      // 화점 주변에도 가중치 부여
+      // 원래대로 돌려놓기
+      board[y][x] = 0;
+
+      // 두 방향 이상에서 열린 3이 형성되면 (투수삼목) 이 위치 반환
+      if (openThreeCount >= 2) {
+        return { x, y };
+      }
+    }
+  }
+
+  return null;
+}
+
+// 4-3 패턴 찾기 (새로 추가)
+function findFourThreePattern() {
+  const directions = [
+    [0, 1], // 수평
+    [1, 0], // 수직
+    [1, 1], // 대각선 (왼쪽 위 -> 오른쪽 아래)
+    [1, -1], // 대각선 (왼쪽 아래 -> 오른쪽 위)
+  ];
+
+  // 모든 빈 위치 검사
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (board[y][x] !== 0) continue; // 빈 위치만 검사
+
+      // 이 위치에 임시로 사용자 돌을 놓아봄
+      board[y][x] = 1;
+
+      let hasFour = false;
+      let hasOpenThree = false;
+
+      // 4목이 있는지 확인
+      for (const [dx, dy] of directions) {
+        if (checkFourInRow(x, y, dx, dy, 1)) {
+          hasFour = true;
+          break;
+        }
+      }
+
+      // 열린 3목이 있는지 확인
+      if (!hasFour) {
+        for (const [dx, dy] of directions) {
+          if (isOpenThree(x, y, dx, dy, 1)) {
+            hasOpenThree = true;
+            break;
+          }
+        }
+      }
+
+      // 원래대로 돌려놓기
+      board[y][x] = 0;
+
+      // 4목과 열린 3목이 모두 있으면 이 위치에 돌을 두어 방어
+      if (hasFour && hasOpenThree) {
+        return { x, y };
+      }
+    }
+  }
+
+  return null;
+}
+
+// 4목 확인 함수 (새로 추가)
+function checkFourInRow(x, y, dx, dy, player) {
+  // 해당 방향으로 연속된 돌의 수 계산
+  let count = 1; // 현재 위치 포함
+
+  // 왼쪽 방향 확인
+  for (let i = 1; i <= 3; i++) {
+    const nx = x - dx * i;
+    const ny = y - dy * i;
+
+    if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) {
+      break;
+    }
+
+    if (board[ny][nx] === player) {
+      count++;
+    } else {
+      break;
+    }
+  }
+
+  // 오른쪽 방향 확인
+  for (let i = 1; i <= 3; i++) {
+    const nx = x + dx * i;
+    const ny = y + dy * i;
+
+    if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) {
+      break;
+    }
+
+    if (board[ny][nx] === player) {
+      count++;
+    } else {
+      break;
+    }
+  }
+
+  // 돌이 정확히 4개이면 참
+  return count === 4;
+}
+
+// 은닉된 4 패턴 만들기 (새로 추가)
+function createHiddenFour() {
+  const directions = [
+    [0, 1], // 수평
+    [1, 0], // 수직
+    [1, 1], // 대각선 (왼쪽 위 -> 오른쪽 아래)
+    [1, -1], // 대각선 (왼쪽 아래 -> 오른쪽 위)
+  ];
+
+  // 모든 빈 위치 검사
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (board[y][x] !== 0) continue; // 빈 위치만 검사
+
+      // 이 위치에 임시로 컴퓨터 돌을 놓아봄
+      board[y][x] = 2;
+
+      // 각 방향에서 확인
+      for (const [dx, dy] of directions) {
+        // 현재 위치에서 양쪽으로 돌의 패턴 확인
+        // OO_OO 패턴 찾기 (O는 돌, _는 빈 칸)
+
+        // 왼쪽 검사
+        let leftCount = 0;
+        for (let i = 1; i <= 2; i++) {
+          const nx = x - dx * i;
+          const ny = y - dy * i;
+
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) {
+            break;
+          }
+
+          if (board[ny][nx] === 2) {
+            leftCount++;
+          } else {
+            break;
+          }
+        }
+
+        // 오른쪽 검사
+        let rightCount = 0;
+        for (let i = 1; i <= 2; i++) {
+          const nx = x + dx * i;
+          const ny = y + dy * i;
+
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) {
+            break;
+          }
+
+          if (board[ny][nx] === 2) {
+            rightCount++;
+          } else {
+            break;
+          }
+        }
+
+        // 패턴이 OO_OO 형태인지 확인 (총 5개 중 가운데 채움)
+        if (leftCount + rightCount >= 3) {
+          // 원래대로 돌려놓기
+          board[y][x] = 0;
+
+          // 이 위치에 실제로 돌 놓기
+          board[y][x] = 2;
+          lastMove = { x, y };
+          finishMove(x, y);
+          return true;
+        }
+
+        // 또는 O_OOO 혹은 OOO_O 패턴 찾기
+        // 왼쪽 한 칸 건너뛰기
+        if (leftCount === 1) {
+          const skipX = x - dx * 2;
+          const skipY = y - dy * 2;
+
+          if (
+            skipX >= 0 &&
+            skipX < BOARD_SIZE &&
+            skipY >= 0 &&
+            skipY < BOARD_SIZE &&
+            board[skipY][skipX] === 0
+          ) {
+            const nx = skipX - dx;
+            const ny = skipY - dy;
+
+            if (
+              nx >= 0 &&
+              nx < BOARD_SIZE &&
+              ny >= 0 &&
+              ny < BOARD_SIZE &&
+              board[ny][nx] === 2
+            ) {
+              // 원래대로 돌려놓기
+              board[y][x] = 0;
+
+              // 이 위치에 실제로 돌 놓기
+              board[y][x] = 2;
+              lastMove = { x, y };
+              finishMove(x, y);
+              return true;
+            }
+          }
+        }
+
+        // 오른쪽 한 칸 건너뛰기
+        if (rightCount === 1) {
+          const skipX = x + dx * 2;
+          const skipY = y + dy * 2;
+
+          if (
+            skipX >= 0 &&
+            skipX < BOARD_SIZE &&
+            skipY >= 0 &&
+            skipY < BOARD_SIZE &&
+            board[skipY][skipX] === 0
+          ) {
+            const nx = skipX + dx;
+            const ny = skipY + dy;
+
+            if (
+              nx >= 0 &&
+              nx < BOARD_SIZE &&
+              ny >= 0 &&
+              ny < BOARD_SIZE &&
+              board[ny][nx] === 2
+            ) {
+              // 원래대로 돌려놓기
+              board[y][x] = 0;
+
+              // 이 위치에 실제로 돌 놓기
+              board[y][x] = 2;
+              lastMove = { x, y };
+              finishMove(x, y);
+              return true;
+            }
+          }
+        }
+      }
+
+      // 원래대로 돌려놓기
+      board[y][x] = 0;
+    }
+  }
+
+  return false;
+}
+
+// 향상된 전략적 위치 평가
+function playStrategicPositionAdvanced() {
+  // 위치 평가 점수 배열 초기화
+  const scoreBoard = Array(BOARD_SIZE)
+    .fill()
+    .map(() => Array(BOARD_SIZE).fill(0));
+
+  // 평가 기준:
+  // 1. 컴퓨터 돌에 인접한 위치 (가중치 높음)
+  // 2. 사용자 돌에 인접한 위치 (방어)
+  // 3. 중앙에 가까운 위치 선호
+  // 4. 상대방 돌 차단 및 자신의 돌 연결 가능성
+
+  const center = Math.floor(BOARD_SIZE / 2);
+
+  // 점수 계산
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (board[y][x] !== 0) continue; // 빈 위치만 평가
+
+      // 1. 중앙에 가까울수록 기본 점수 높게
+      const distFromCenter = Math.abs(x - center) + Math.abs(y - center);
+      scoreBoard[y][x] += Math.max(1, 10 - distFromCenter);
+
+      // 2. 인접한 돌 평가
+      let playerStoneCount = 0;
+      let computerStoneCount = 0;
+
+      // 8방향 확인
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           if (dx === 0 && dy === 0) continue;
@@ -1838,30 +1863,289 @@ function playAdvancedStrategicPosition() {
           const nx = x + dx;
           const ny = y + dy;
 
-          if (
-            nx >= 0 &&
-            nx < BOARD_SIZE &&
-            ny >= 0 &&
-            ny < BOARD_SIZE &&
-            board[ny][nx] === 0
-          ) {
-            const weight = 2;
-            for (let k = 0; k < weight; k++) {
-              strategicPositions.push({ x: nx, y: ny });
-            }
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE)
+            continue;
+
+          if (board[ny][nx] === 1) {
+            playerStoneCount++;
+          } else if (board[ny][nx] === 2) {
+            computerStoneCount++;
           }
         }
+      }
+
+      // 컴퓨터 돌에 인접할수록 높은 점수
+      scoreBoard[y][x] += computerStoneCount * 8;
+
+      // 사용자 돌에 인접할수록 중간 점수 (방어)
+      scoreBoard[y][x] += playerStoneCount * 6;
+
+      // 3. 공격 및 방어 패턴 평가
+      // 임시로 컴퓨터 돌 놓기
+      board[y][x] = 2;
+
+      // 공격 패턴 평가
+      const directions = [
+        [0, 1], // 수평
+        [1, 0], // 수직
+        [1, 1], // 대각선 (왼쪽 위 -> 오른쪽 아래)
+        [1, -1], // 대각선 (왼쪽 아래 -> 오른쪽 위)
+      ];
+
+      for (const [dx, dy] of directions) {
+        // 연속 돌 확인
+        let continuousStones = 1; // 현재 위치 포함
+        let emptyAfter = 0;
+        let emptyBefore = 0;
+
+        // 한쪽 방향
+        for (let i = 1; i <= 4; i++) {
+          const nx = x + dx * i;
+          const ny = y + dy * i;
+
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+
+          if (board[ny][nx] === 2) {
+            continuousStones++;
+          } else if (board[ny][nx] === 0) {
+            emptyAfter++;
+            break;
+          } else {
+            break;
+          }
+        }
+
+        // 반대 방향
+        for (let i = 1; i <= 4; i++) {
+          const nx = x - dx * i;
+          const ny = y - dy * i;
+
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+
+          if (board[ny][nx] === 2) {
+            continuousStones++;
+          } else if (board[ny][nx] === 0) {
+            emptyBefore++;
+            break;
+          } else {
+            break;
+          }
+        }
+
+        // 패턴에 따른 점수 부여
+        if (continuousStones >= 2) {
+          // 양쪽이 열린 경우 더 높은 점수
+          if (emptyBefore > 0 && emptyAfter > 0) {
+            scoreBoard[y][x] += continuousStones * 15;
+          } else if (emptyBefore > 0 || emptyAfter > 0) {
+            // 한쪽만 열린 경우
+            scoreBoard[y][x] += continuousStones * 10;
+          }
+        }
+      }
+
+      // 임시 돌 제거
+      board[y][x] = 0;
+
+      // 방어 패턴 평가 (사용자 돌에 대해 동일 평가)
+      board[y][x] = 1;
+
+      for (const [dx, dy] of directions) {
+        let continuousStones = 1;
+        let emptyAfter = 0;
+        let emptyBefore = 0;
+
+        // 한쪽 방향
+        for (let i = 1; i <= 4; i++) {
+          const nx = x + dx * i;
+          const ny = y + dy * i;
+
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+
+          if (board[ny][nx] === 1) {
+            continuousStones++;
+          } else if (board[ny][nx] === 0) {
+            emptyAfter++;
+            break;
+          } else {
+            break;
+          }
+        }
+
+        // 반대 방향
+        for (let i = 1; i <= 4; i++) {
+          const nx = x - dx * i;
+          const ny = y - dy * i;
+
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+
+          if (board[ny][nx] === 1) {
+            continuousStones++;
+          } else if (board[ny][nx] === 0) {
+            emptyBefore++;
+            break;
+          } else {
+            break;
+          }
+        }
+
+        // 패턴에 따른 점수 부여 (방어는 공격보다 약간 낮은 우선순위)
+        if (continuousStones >= 2) {
+          if (emptyBefore > 0 && emptyAfter > 0) {
+            scoreBoard[y][x] += continuousStones * 12;
+          } else if (emptyBefore > 0 || emptyAfter > 0) {
+            scoreBoard[y][x] += continuousStones * 8;
+          }
+        }
+      }
+
+      // 임시 돌 제거
+      board[y][x] = 0;
+    }
+  }
+
+  // 최고 점수 위치 찾기
+  let maxScore = -1;
+  let bestPositions = [];
+
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (board[y][x] === 0 && scoreBoard[y][x] > maxScore) {
+        maxScore = scoreBoard[y][x];
+        bestPositions = [{ x, y }];
+      } else if (board[y][x] === 0 && scoreBoard[y][x] === maxScore) {
+        bestPositions.push({ x, y });
       }
     }
   }
 
-  // 랜덤으로 전략적 위치 선택
-  if (strategicPositions.length > 0) {
+  if (bestPositions.length > 0) {
+    // 최고 점수가 여러 개면 랜덤 선택
     const position =
-      strategicPositions[Math.floor(Math.random() * strategicPositions.length)];
-    board[position.y][position.x] = 2; // 컴퓨터의 돌
+      bestPositions[Math.floor(Math.random() * bestPositions.length)];
+    board[position.y][position.x] = 2;
     lastMove = position;
     finishMove(position.x, position.y);
+    return true;
+  }
+
+  return false;
+}
+
+// 좋은 형태의 두수 찾기 (새로 추가)
+function findGoodShapeMove() {
+  // 좋은 형태 패턴들:
+  // 1. 삼각형 모양 만들기 (세 돌이 삼각형 꼭지점에 위치)
+  // 2. 나이트 모브 패턴 (체스의 나이트처럼 L자 모양으로 돌 연결)
+
+  const goodMoves = [];
+
+  // 모든 빈 위치 검사
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      if (board[y][x] !== 0) continue; // 빈 위치만 검사
+
+      let score = 0;
+
+      // 삼각형 패턴 찾기
+      const trianglePatterns = [
+        // 오른쪽 아래 삼각형
+        [
+          { dx: 1, dy: 0 },
+          { dx: 0, dy: 1 },
+          { dx: 1, dy: 1 },
+        ],
+        // 오른쪽 위 삼각형
+        [
+          { dx: 1, dy: 0 },
+          { dx: 0, dy: -1 },
+          { dx: 1, dy: -1 },
+        ],
+        // 왼쪽 아래 삼각형
+        [
+          { dx: -1, dy: 0 },
+          { dx: 0, dy: 1 },
+          { dx: -1, dy: 1 },
+        ],
+        // 왼쪽 위 삼각형
+        [
+          { dx: -1, dy: 0 },
+          { dx: 0, dy: -1 },
+          { dx: -1, dy: -1 },
+        ],
+      ];
+
+      // 삼각형 패턴 점수 계산
+      for (const pattern of trianglePatterns) {
+        let patternScore = 0;
+        let valid = true;
+
+        for (const { dx, dy } of pattern) {
+          const nx = x + dx;
+          const ny = y + dy;
+
+          if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) {
+            valid = false;
+            break;
+          }
+
+          if (board[ny][nx] === 2) {
+            patternScore += 10;
+          } else if (board[ny][nx] === 1) {
+            patternScore -= 5;
+            valid = false;
+            break;
+          }
+        }
+
+        if (valid && patternScore > 0) {
+          score += patternScore;
+        }
+      }
+
+      // 나이트 무브 패턴 찾기
+      const knightPatterns = [
+        { dx: 1, dy: 2 },
+        { dx: 2, dy: 1 },
+        { dx: -1, dy: 2 },
+        { dx: -2, dy: 1 },
+        { dx: 1, dy: -2 },
+        { dx: 2, dy: -1 },
+        { dx: -1, dy: -2 },
+        { dx: -2, dy: -1 },
+      ];
+
+      for (const { dx, dy } of knightPatterns) {
+        const nx = x + dx;
+        const ny = y + dy;
+
+        if (nx >= 0 && nx < BOARD_SIZE && ny >= 0 && ny < BOARD_SIZE) {
+          if (board[ny][nx] === 2) {
+            score += 8; // 나이트 무브 패턴에 점수 부여
+          }
+        }
+      }
+
+      // 총점이 특정 임계값 이상이면 좋은 수로 간주
+      if (score >= 10) {
+        goodMoves.push({ x, y, score });
+      }
+    }
+  }
+
+  // 점수순으로 정렬
+  goodMoves.sort((a, b) => b.score - a.score);
+
+  // 최상위 수 선택
+  if (goodMoves.length > 0) {
+    const topMoves = goodMoves.filter(
+      (move) => move.score >= goodMoves[0].score * 0.8
+    );
+    const selectedMove = topMoves[Math.floor(Math.random() * topMoves.length)];
+
+    board[selectedMove.y][selectedMove.x] = 2;
+    lastMove = { x: selectedMove.x, y: selectedMove.y };
+    finishMove(selectedMove.x, selectedMove.y);
     return true;
   }
 
