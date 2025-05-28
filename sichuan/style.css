@@ -16,10 +16,37 @@ body {
 .board {
   display: grid;
   grid-template-columns: repeat(10, 1fr);
-  gap: 4px;
+  gap: 8px; /* 기본 간격 증가 */
   margin: 20px auto;
   width: 100%;
   max-width: 500px;
+  position: relative; /* 연결선 배치를 위한 상대적 위치 */
+}
+
+.connection-line {
+  position: absolute;
+  height: 6px;
+  background-color: #fa8c16;
+  border-radius: 3px;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: 0 0 8px rgba(250, 140, 22, 0.8);
+  animation: lineGlow 0.5s ease;
+}
+
+@keyframes lineGlow {
+  0% {
+    opacity: 0.3;
+    height: 3px;
+  }
+  50% {
+    opacity: 1;
+    height: 6px;
+  }
+  100% {
+    opacity: 0.7;
+    height: 5px;
+  }
 }
 .tile {
   aspect-ratio: 1/1;
@@ -30,15 +57,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 28px; /* 이모지 크기 증가 */
   transition: all 0.2s;
+  padding: 5px; /* 내부 여백 추가 */
 }
 .tile:hover {
   background-color: #bae7ff;
+  transform: scale(1.05); /* 호버 시 약간 확대 */
 }
 .selected {
   background-color: #ffd591;
   border-color: #fa8c16;
+  transform: scale(1.05); /* 선택 시 약간 확대 */
 }
 .tile.matched {
   visibility: hidden;
@@ -48,11 +78,40 @@ body {
   border-color: transparent;
   cursor: default;
 }
-.line {
+.line-container {
   position: absolute;
-  background-color: #1890ff;
-  z-index: 10;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 20;
   pointer-events: none;
+}
+
+.connection-line {
+  position: absolute;
+  height: 5px;
+  background-color: #fa8c16;
+  border-radius: 2px;
+  z-index: 20;
+  pointer-events: none;
+  box-shadow: 0 0 5px rgba(250, 140, 22, 0.7);
+  animation: lineGlow 0.5s ease;
+}
+
+@keyframes lineGlow {
+  0% {
+    opacity: 0.3;
+    box-shadow: 0 0 2px rgba(250, 140, 22, 0.3);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 10px rgba(250, 140, 22, 0.8);
+  }
+  100% {
+    opacity: 0.7;
+    box-shadow: 0 0 5px rgba(250, 140, 22, 0.5);
+  }
 }
 .info {
   margin-top: 20px;
