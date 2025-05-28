@@ -1,3 +1,11 @@
+:root {
+  --pop-default-y: 0%;
+  --wrong-color: #ff4f4f;
+  --wrong-bg: #ff4f4f80;
+  --hint-color: #2196f3;
+  --correct-bg: #ffeb0030;
+}
+
 body {
   margin: 0;
   background: #23192e;
@@ -13,6 +21,7 @@ body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+  transition: display 0.3s;
 }
 
 .hidden {
@@ -50,11 +59,12 @@ button:active {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(var(--grid-cols, 4), 1fr);
+  grid-template-rows: repeat(var(--grid-rows, 5), 1fr);
   grid-gap: 2vw;
   width: 90vw;
   max-width: 500px;
-  aspect-ratio: 1/1;
+  aspect-ratio: 4/5;
   margin: 0 auto;
 }
 
@@ -62,6 +72,7 @@ button:active {
   background: #2d223a;
   border-radius: 2vw;
   width: 100%;
+  height: 100%;
   aspect-ratio: 1/1;
   position: relative;
   overflow: hidden;
@@ -72,42 +83,58 @@ button:active {
   touch-action: manipulation;
 }
 
-.character {
+.character-box {
   position: absolute;
   width: 80%;
   left: 10%;
-  bottom: 0;
+  top: 10%;
+  bottom: 10%;
+  text-align: center;
   opacity: 0;
   transform: scale(0.7) translateY(40%);
   transition: opacity 0.2s, transform 0.3s;
   pointer-events: none;
 }
 
-.character.show {
+.character-box .character {
+  width: auto;
+  max-width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.character-box.show {
   opacity: 1;
-  transform: scale(1.1) translateY(-10%);
+  transform: scale(1.1) translateY(var(--pop-default-y));
   transition: opacity 0.2s, transform 0.3s cubic-bezier(0.5, 1.5, 0.5, 1);
 }
 
-.character.clicked {
+.character-box.clicked {
   animation: pop 0.2s;
 }
+
 @keyframes pop {
   0% {
-    transform: scale(1.1) translateY(-10%);
+    transform: scale(1.1) translateY(var(--pop-default-y));
   }
   50% {
     transform: scale(1.25) translateY(-20%);
   }
   100% {
-    transform: scale(1.1) translateY(-10%);
+    transform: scale(1.1) translateY(var(--pop-default-y));
   }
+}
+
+.tile.hint {
+  box-shadow: 0 0 0 5px var(--hint-color);
+  z-index: 2;
 }
 
 .tile.wrong {
   animation: shake 0.4s;
-  box-shadow: 0 0 0 4px #ff4f4f;
+  box-shadow: 0 0 0 4px var(--wrong-color);
 }
+
 @keyframes shake {
   0% {
     transform: translateX(0);
@@ -129,12 +156,63 @@ button:active {
   }
 }
 
-.character.darken {
+.character-box.darken {
   filter: brightness(0.5) grayscale(0.3);
   opacity: 0.7;
 }
 
-.character.hint {
-  box-shadow: 0 0 0 5px #2196f3, 0 0 16px 2px #2196f399;
-  z-index: 2;
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+
+  &:before,
+  &:after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 20vw;
+  }
+
+  &:before {
+    left: 0;
+  }
+
+  &:after {
+    right: 0;
+  }
+}
+
+#wrongOverlay {
+  &:before {
+    background: linear-gradient(to right, var(--wrong-bg), transparent);
+  }
+
+  &:after {
+    background: linear-gradient(to left, var(--wrong-bg), transparent);
+  }
+}
+
+#wrongOverlay.active {
+  opacity: 1;
+}
+
+#correctOverlay {
+  &:before {
+    background: linear-gradient(to right, var(--correct-bg), transparent);
+  }
+
+  &:after {
+    background: linear-gradient(to left, var(--correct-bg), transparent);
+  }
+}
+
+#correctOverlay.active {
+  opacity: 1;
 }
