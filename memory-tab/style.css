@@ -1,9 +1,10 @@
 :root {
   --pop-default-y: 0%;
+  --show-default-scale: 1.1;
   --wrong-color: #ff4f4f;
   --wrong-bg: #ff4f4f80;
   --hint-color: #2196f3;
-  --correct-bg: #ffeb0030;
+  --correct-bg: #4572fd50;
 }
 
 body {
@@ -68,6 +69,23 @@ button:active {
   margin: 0 auto;
 }
 
+.sound-btn {
+  padding: 0;
+  margin: 0;
+  width: 40px;
+  height: 40px;
+  background: url("./images/btn_sound-sheet.png") no-repeat 0 0 / auto 100%;
+  text-indent: -9999px;
+}
+
+.sound-btn.on {
+  background-position: 0 0;
+}
+
+.sound-btn.off {
+  background-position: 100% 0;
+}
+
 .tile {
   background: #2d223a;
   border-radius: 2vw;
@@ -75,12 +93,17 @@ button:active {
   height: 100%;
   aspect-ratio: 1/1;
   position: relative;
-  overflow: hidden;
+  //overflow: hidden;
   box-shadow: 0 2px 8px #0003;
   display: flex;
   align-items: center;
   justify-content: center;
   touch-action: manipulation;
+}
+
+.tile.hint {
+  box-shadow: 0 0 0 5px var(--hint-color);
+  z-index: 2;
 }
 
 .character-box {
@@ -91,9 +114,67 @@ button:active {
   bottom: 10%;
   text-align: center;
   opacity: 0;
-  transform: scale(0.7) translateY(40%);
+  transform: scale(0.7) translateY(--pop-default-y);
   transition: opacity 0.2s, transform 0.3s;
   pointer-events: none;
+  z-index: 1;
+}
+
+.character-box.show {
+  opacity: 1;
+  transform: scale(var(--show-default-scale)) translateY(var(--pop-default-y));
+  transition: opacity 0.2s, transform 0.3s cubic-bezier(0.5, 1.5, 0.5, 1),
+    filter 0.3s;
+}
+
+.character-box.clicked {
+  animation: pop 0.2s;
+}
+@keyframes pop {
+  0% {
+    transform: scale(var(--show-default-scale)) translateY(var(--pop-default-y));
+  }
+  50% {
+    transform: scale(1.25) translateY(-20%);
+  }
+  100% {
+    transform: scale(var(--show-default-scale)) translateY(var(--pop-default-y));
+  }
+}
+
+.character-box.wrong {
+  animation: shake 0.4s;
+}
+@keyframes shake {
+  0% {
+    transform: scale(var(--show-default-scale)) translateY(var(--pop-default-y))
+      translateX(0);
+  }
+  20% {
+    transform: scale(var(--show-default-scale)) translateY(var(--pop-default-y))
+      translateX(-8px);
+  }
+  40% {
+    transform: scale(var(--show-default-scale)) translateY(var(--pop-default-y))
+      translateX(8px);
+  }
+  60% {
+    transform: scale(var(--show-default-scale)) translateY(var(--pop-default-y))
+      translateX(-8px);
+  }
+  80% {
+    transform: scale(var(--show-default-scale)) translateY(var(--pop-default-y))
+      translateX(8px);
+  }
+  100% {
+    transform: scale(var(--show-default-scale)) translateY(var(--pop-default-y))
+      translateX(0);
+  }
+}
+
+.character-box.darken {
+  filter: brightness(0.5) grayscale(0.3);
+  opacity: 0.7;
 }
 
 .character-box .character {
@@ -103,62 +184,41 @@ button:active {
   object-fit: contain;
 }
 
-.character-box.show {
-  opacity: 1;
-  transform: scale(1.1) translateY(var(--pop-default-y));
-  transition: opacity 0.2s, transform 0.3s cubic-bezier(0.5, 1.5, 0.5, 1);
+.character-box:before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 50%;
+  transform: scale(0.9);
+  pointer-events: none;
+  z-index: -1;
 }
 
-.character-box.clicked {
-  animation: pop 0.2s;
+.character-box.clicked:before {
+  animation: clicked-ripple 0.2s linear infinite;
 }
-
-@keyframes pop {
+@-webkit-keyframes clicked-ripple {
   0% {
-    transform: scale(1.1) translateY(var(--pop-default-y));
-  }
-  50% {
-    transform: scale(1.25) translateY(-20%);
+    box-shadow: 0 0 0 0 var(--correct-bg), 0 0 0 1.2em var(--correct-bg);
   }
   100% {
-    transform: scale(1.1) translateY(var(--pop-default-y));
+    box-shadow: 0 0 0 1.2em var(--correct-bg), 0 0 0 1.4em var(--correct-bg);
   }
 }
 
-.tile.hint {
-  box-shadow: 0 0 0 5px var(--hint-color);
-  z-index: 2;
+.character-box.wrong:before {
+  animation: wrong-ripple 0.5s linear infinite;
 }
-
-.tile.wrong {
-  animation: shake 0.4s;
-  box-shadow: 0 0 0 4px var(--wrong-color);
-}
-
-@keyframes shake {
+@-webkit-keyframes wrong-ripple {
   0% {
-    transform: translateX(0);
-  }
-  20% {
-    transform: translateX(-8px);
-  }
-  40% {
-    transform: translateX(8px);
-  }
-  60% {
-    transform: translateX(-8px);
-  }
-  80% {
-    transform: translateX(8px);
+    box-shadow: 0 0 0 0 var(--wrong-bg), 0 0 0 1.2em var(--wrong-bg);
   }
   100% {
-    transform: translateX(0);
+    box-shadow: 0 0 0 1.2em var(--wrong-bg), 0 0 0 1.4em var(--wrong-bg);
   }
-}
-
-.character-box.darken {
-  filter: brightness(0.5) grayscale(0.3);
-  opacity: 0.7;
 }
 
 .overlay {
@@ -170,6 +230,7 @@ button:active {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.3s;
+  z-index: 9;
 
   &:before,
   &:after {

@@ -2,10 +2,7 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0" />
     <title>순서기억하기 게임</title>
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -27,6 +24,9 @@
         <div>LEVEL <span id="level">1</span></div>
         <div>TIME <span id="timer">2:00</span></div>
         <div>POINT <span id="point">0</span></div>
+        <div>
+          <button id="soundBtn" class="sound-btn">sound</button>
+        </div>
       </div>
       <div id="grid" class="grid"></div>
     </div>
@@ -41,14 +41,7 @@
       <button id="shareBtn">공유하기</button>
     </div>
 
-    <audio
-      id="successSound"
-      src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae1e2.mp3"
-    ></audio>
-    <audio
-      id="failSound"
-      src="https://cdn.pixabay.com/audio/2022/07/26/audio_124bfae1e2.mp3"
-    ></audio>
-    <script src="script.js"></script>
+    <script src="./js/audio_manager.js"></script>
+    <script src="./js/script.js"></script>
   </body>
 </html>
