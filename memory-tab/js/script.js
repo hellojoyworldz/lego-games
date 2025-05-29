@@ -10,15 +10,16 @@ const GameConfig = {
     LEVEL_MULTIPLIER_ENABLED: true, // 레벨 별 포인트 배수 적용 여부 - true면 레벨 * POINT_MULTIPLIER, false면 BASE_POINT
   },
   timing: {
-    BASE_TIME: 10 * 1000, // 기본 제공 시간
+    BASE_TIME: 0.5 * 10 * 1000, // 기본 제공 시간
     MAX_TIME: 5 * 60 * 1000, // 최대 시간
-    PENALTY: 2 * 1000, // 오답 시 시간 감소
-    REWARD: 7 * 1000, // 정답 시 시간 증가
+    PENALTY: 0.7 * 1000, // 오답 시 시간 감소
+    REWARD: 0.7 * 1000, // 정답 시 시간 증가
     SHOW_INTERVAL: 150, // 패턴 표시 간격
     CLICK_ANIMATION: 200, // 클릭 애니메이션 지속 시간
     WRONG_ANIMATION: 350, // 오답 애니메이션 지속 시간
     NEXT_LEVEL_DELAY: 300, // 다음 레벨 진행 전 딜레이 시간
     RETRY_DELAY: 400, // 오답 후 같은 레벨 재시도 전 딜레이
+    TIMER_INTERVAL: 100, // 타이머 갱신 간격
   },
   display: {
     CHARACTER_IMAGE: "./images/circle10.png", // 캐릭터 이미지
@@ -94,7 +95,9 @@ class DOMElements {
       grid: document.getElementById("grid"), // 그리드
       levelSpan: document.getElementById("level"), // 레벨 표시
       timerSpan: document.getElementById("timer"), // 타이머 표시
+      addTime: document.getElementById("addTime"), // 타이머 증가 표시
       currentPoint: document.getElementById("point"), // 현재 포인트 표시
+      addPoint: document.getElementById("addPoint"), // 포인트 증가 표시
       soundButton: document.getElementById("soundBtn"), // 사운드 토글 버튼
       wrongOverlay: document.getElementById("wrongOverlay"), // 오답 오버레이 효과
       correctOverlay: document.getElementById("correctOverlay"), // 정답 오버레이 효과
@@ -104,10 +107,10 @@ class DOMElements {
     this.result = {
       screen: document.getElementById("result"), // 결과 화면 컨테이너
       finalLevel: document.getElementById("finalLevel"), // 최종 레벨 표시
-      accuracy: document.getElementById("accuracy"), // 정답률 표시
+      // accuracy: document.getElementById("accuracy"), // 정답률 표시
       finalPoint: document.getElementById("finalPoint"), // 최종 포인트 표시
       restartButton: document.getElementById("restartBtn"), // 게임 재시작 버튼
-      shareButton: document.getElementById("shareBtn"), // 게임 결과 공유 버튼
+      // shareButton: document.getElementById("shareBtn"), // 게임 결과 공유 버튼
     };
   }
 }
@@ -295,7 +298,6 @@ function onTileClick(e) {
   if (gameState.userInput.length === gameState.pattern.length) {
     gameState.playing = false;
     gameState.correctCount++;
-    gameState.timer = Math.min(gameState.timer + GameConfig.timing.REWARD, GameConfig.timing.MAX_TIME);
     updateTimerDisplay();
 
     setTimeout(() => {
@@ -317,6 +319,17 @@ function handleCorrectClick(characterBox) {
   gameState.point += pointToAdd;
   dom.game.currentPoint.textContent = gameState.point;
 
+  // 시간 증가
+  gameState.timer = Math.min(gameState.timer + GameConfig.timing.REWARD, GameConfig.timing.MAX_TIME);
+
+  //시간 증가 표시
+  dom.game.addTime.textContent = `+${GameConfig.timing.REWARD / 1000}`;
+  dom.game.addTime.classList.add("active");
+
+  // 포인트 증가 표시
+  dom.game.addPoint.textContent = `+${pointToAdd}`;
+  dom.game.addPoint.classList.add("active");
+
   // 어두운 효과 적용
   if (GameConfig.display.DARKEN_CORRECT) {
     characterBox.classList.add("darken");
@@ -325,8 +338,12 @@ function handleCorrectClick(characterBox) {
   // 정답 오버레이 효과
   if (dom.game.correctOverlay) {
     dom.game.correctOverlay.classList.add("active");
+    dom.game.addPoint.classList.add("active");
+    dom.game.addTime.classList.add("active");
     setTimeout(() => {
       dom.game.correctOverlay.classList.remove("active");
+      dom.game.addPoint.classList.remove("active");
+      dom.game.addTime.classList.remove("active");
     }, GameConfig.timing.WRONG_ANIMATION);
   }
 
@@ -345,11 +362,16 @@ function handleWrongClick(tile) {
   const characterBox = tile.querySelector(".character-box");
   characterBox.classList.add("wrong");
 
+  // 시간 감소 표시
+  dom.game.addTime.textContent = `-${GameConfig.timing.PENALTY / 1000}`;
+
   // 틀린 오버레이 효과
   if (dom.game.wrongOverlay) {
     dom.game.wrongOverlay.classList.add("active");
+    dom.game.addTime.classList.add("active");
     setTimeout(() => {
       dom.game.wrongOverlay.classList.remove("active");
+      dom.game.addTime.classList.remove("active");
     }, GameConfig.timing.WRONG_ANIMATION);
   }
 
@@ -399,24 +421,29 @@ function startTimer() {
 
   // 새 타이머 설정
   gameState.intervalId = setInterval(() => {
-    // 1초씩 감소
-    gameState.timer = Math.max(gameState.timer - 1000, 0);
+    // 시간 감소
+    gameState.timer = Math.max(gameState.timer - GameConfig.timing.TIMER_INTERVAL, 0);
     updateTimerDisplay();
 
     // 시간 종료 시 게임 종료
     if (gameState.timer <= 0) {
       endGame();
     }
-  }, 1000);
+  }, GameConfig.timing.TIMER_INTERVAL);
 }
 
 // 타이머 표시 업데이트
 function updateTimerDisplay() {
   const minutes = Math.floor(gameState.timer / (60 * 1000));
   const seconds = Math.floor((gameState.timer % (60 * 1000)) / 1000);
+  const milliseconds = Math.floor((gameState.timer % 1000) / 10); // 10ms 단위로 표시
 
-  // 시간 형식: MM:SS
-  dom.game.timerSpan.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  // 시간 형식: MM:SS:MS
+  if (minutes > 0) {
+    dom.game.timerSpan.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  } else {
+    dom.game.timerSpan.textContent = `${String(seconds).padStart(2, "0")}:${String(milliseconds).padStart(2, "0")}`;
+  }
 }
 
 // 게임 시작
@@ -451,9 +478,9 @@ function endGame() {
 
   // 결과 표시
   dom.result.finalLevel.textContent = gameState.level;
-  dom.result.accuracy.textContent = gameState.totalCount
-    ? Math.round((gameState.correctCount / gameState.totalCount) * 100)
-    : 0;
+  // dom.result.accuracy.textContent = gameState.totalCount
+  //   ? Math.round((gameState.correctCount / gameState.totalCount) * 100)
+  //   : 0;
   dom.result.finalPoint.textContent = gameState.point;
 
   // 사운드: 게임오버 효과음, BGM 정지
@@ -478,7 +505,7 @@ function shareGameResult() {
 function setupEventListeners() {
   dom.intro.startButton.onclick = startGame;
   dom.result.restartButton.onclick = startGame;
-  dom.result.shareButton.onclick = shareGameResult;
+  // dom.result.shareButton.onclick = shareGameResult;
   dom.game.soundButton.addEventListener("click", toggleSound);
 }
 

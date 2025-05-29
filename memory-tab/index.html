@@ -21,13 +21,19 @@
     <!-- 게임 화면 -->
     <div id="game" class="screen hidden">
       <div class="game-header">
-        <div>LEVEL <span id="level">1</span></div>
-        <div>TIME <span id="timer">2:00</span></div>
-        <div>POINT <span id="point">0</span></div>
-        <div>
-          <button id="soundBtn" class="sound-btn">sound</button>
+        <div class="score-board">
+          <div>LEVEL <span id="level">1</span></div>
+          <div>TIME <span id="timer">00:00</span><span id="addTime" class="add">a</span></div>
+          <div>POINT <span id="point">0</span><span id="addPoint" class="add"></span></div>
+          <div>
+            <button id="soundBtn" class="sound-btn">sound</button>
+          </div>
         </div>
+        <!-- <div id="timer-bar" class="timer-bar">
+            <div id="timer-bar-fill" id="imer-bar-fill" class="timer-bar-fill"></div>
+        </div> -->
       </div>
+
       <div id="grid" class="grid"></div>
     </div>
 
@@ -35,10 +41,10 @@
     <div id="result" class="screen hidden">
       <h2>게임 종료!</h2>
       <p>최종 레벨: <span id="finalLevel"></span></p>
-      <p>정답률: <span id="accuracy"></span>%</p>
+      <!-- <p>정답률: <span id="accuracy"></span>%</p> -->
       <p>최종 점수: <span id="finalPoint"></span></p>
       <button id="restartBtn">다시 시작</button>
-      <button id="shareBtn">공유하기</button>
+      <!-- <button id="shareBtn">공유하기</button> -->
     </div>
 
     <script src="./js/audio_manager.js"></script>
