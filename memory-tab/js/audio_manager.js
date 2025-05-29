@@ -1,4 +1,8 @@
-const SOUND = {
+/**
+ * 무음모드에서는 사운드 재생 불가
+ */
+
+const SOUNDS = {
   bgm: {
     file: "media/fast-2d-bgm.mp3",
     volume: 0.3,
@@ -29,7 +33,7 @@ class AudioManager {
   async loadSounds() {
     try {
       // 오디오 파일을 fetch로 가져와서 ArrayBuffer로 변환
-      for (const [key, value] of Object.entries(SOUND)) {
+      for (const [key, value] of Object.entries(SOUNDS)) {
         const filePath = value.file;
         const sound = await fetch(filePath).then((res) => res.arrayBuffer());
         this.buffers[key] = await this.audioContext.decodeAudioData(sound);
@@ -53,7 +57,7 @@ class AudioManager {
       source.buffer = this.buffers[sound];
 
       // 볼륨 조절 (SOUND[sound].volume 있으면 적용)
-      const soundConfig = SOUND[sound];
+      const soundConfig = SOUNDS[sound];
       if (soundConfig && soundConfig.volume !== undefined) {
         const gainNode = this.audioContext.createGain();
         gainNode.gain.value = soundConfig.volume;
