@@ -162,8 +162,12 @@ function getPatternLength(level) {
   const len = range
     ? range.length
     : Math.floor(
-        Math.random() * (GameConfig.defaultHighLevelPattern.max - GameConfig.defaultHighLevelPattern.min + 1),
-      ) + GameConfig.defaultHighLevelPattern.min;
+        Math.random() *
+          (GameConfig.defaultHighLevelPattern.max -
+            GameConfig.defaultHighLevelPattern.min +
+            1)
+      ) +
+      GameConfig.defaultHighLevelPattern.min;
 
   return Math.min(len, maxLen);
 }
