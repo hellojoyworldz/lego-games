@@ -19,16 +19,26 @@ export function createSynthSfx(audio) {
       comboLoadPromise = (async () => {
         try {
           const response = await fetch(COMBO_SAMPLE_URL.href);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
           const data = await response.arrayBuffer();
-          comboBuffer = await audioCtx.decodeAudioData(data);
+          comboBuffer = await audioCtx.decodeAudioData(data.slice(0));
           return comboBuffer;
         } catch (e) {
+          comboLoadPromise = null;
           console.warn("콤보 샘플 로드 실패:", e);
           return null;
         }
       })();
     }
     return comboLoadPromise;
+  }
+
+  async function preloadCombo() {
+    const audioCtx = await audio.ensureRunning();
+    if (!audioCtx) return;
+    await loadComboBuffer(audioCtx);
   }
 
   /**
@@ -91,10 +101,11 @@ export function createSynthSfx(audio) {
    * @param {number} pitchUp
    * @param {number} now
    */
-  async function playComboSample(audioCtx, pitchUp, now) {
+  async function playComboSample(audioCtx, pitchUp) {
     const buffer = await loadComboBuffer(audioCtx);
     if (!buffer) return;
 
+    const now = audioCtx.currentTime;
     const source = audioCtx.createBufferSource();
     const gain = audioCtx.createGain();
     source.buffer = buffer;
@@ -151,7 +162,7 @@ export function createSynthSfx(audio) {
       } else if (type === "combo") {
         const pitchUp = pitchUpOverride ?? 1;
         playComboSynthLayers(audioCtx, pitchUp, now);
-        await playComboSample(audioCtx, pitchUp, now);
+        await playComboSample(audioCtx, pitchUp);
       } else if (type === "fail") {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
@@ -196,5 +207,5 @@ export function createSynthSfx(audio) {
     }
   }
 
-  return { play };
+  return { play, preloadCombo };
 }

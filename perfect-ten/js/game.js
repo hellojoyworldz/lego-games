@@ -1184,7 +1184,7 @@ function startGame() {
 
   queueMicrotask(() => {
     audio.primeFromGesture();
-    void audio.ensureRunning();
+    void audio.ensureRunning().then(() => sfx.preloadCombo());
   });
 }
 

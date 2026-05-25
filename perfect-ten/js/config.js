@@ -20,7 +20,7 @@ export const PERFECT_CLEAR_SCORE = 5000; // 올클리어 점수
 export const PERFECT_CLEAR_TIME = TARGET_FPS * 10; // 올클리어 시간 보너스
 export const COMBO_RESET = TARGET_FPS * 3; // 콤보 끊김 간격
 
-export const COMBO_START_AFTER = 3; // 연속 N회 10 성공 후 콤보 시작 (3이면 4번째부터 1콤보)
+export const COMBO_START_AFTER = 2; // 연속 N회 10 성공 후 콤보 시작 (3이면 4번째부터 1콤보)
 export const COMBO_DISPLAY_SUFFIX = "COMBO"; // 콤보 UI 접미사
 export const COMBO_PITCH_START = 1.2; // 콤보 SFX pitch 시작값
 export const COMBO_PITCH_STEP = 0.03; // 콤보당 pitch 증가
