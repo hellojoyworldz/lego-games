@@ -204,7 +204,7 @@ export function createAudioEngine() {
   function syncMuteTooltip() {
     const tooltip = document.getElementById("tooltip-mute");
     if (!tooltip) return;
-    tooltip.textContent = isMuted ? "사운드 OFF!" : "사운드 ON!";
+    tooltip.textContent = isMuted ? "Sound OFF!" : "Sound ON!";
   }
 
   /** @param {string} buttonId */

@@ -22,10 +22,25 @@ import {
   COMBO_PITCH_START,
   COMBO_PITCH_STEP,
   COMBO_PITCH_MAX,
+  PERFECT_PITCH_START,
+  PERFECT_PITCH_STEP,
+  PERFECT_PITCH_MAX,
+  FEVER_COMBO_INTERVAL,
+  FEVER_COUNTDOWN_SECONDS,
+  FEVER_GOLDEN_SCORE,
+  FEVER_SPAWN_INTERVAL,
+  FEVER_METEOR_SPAWN_INTERVAL,
+  GOLDEN_TEN_COLOR,
+  GOLDEN_TEN_GLOW,
+  BONUS_SURVIVAL_INTERVAL,
+  BONUS_COUNTDOWN_SECONDS,
+  BONUS_PITCH,
   PENALTY_DURATION,
   STACK_OVER_LIMIT,
   STACK_SETTLED_VELOCITY,
   DANGER_TIME_THRESHOLD,
+  HURRY_UP_PITCH,
+  HURRY_UP_PLAY_EVERY,
   TIME_DECAY_SCALE,
   ADD_BALL_COUNT,
   MATCH_SPAWN_COUNT,
@@ -66,6 +81,15 @@ const btnPause = document.getElementById("btn-pause");
 const tutorialBtn = document.getElementById("btn-tutorial");
 const tutorialModal = document.getElementById("tutorial-modal");
 const gameContainer = document.getElementById("game-container");
+const feverOverlay = document.getElementById("fever-overlay");
+const feverTitle = document.getElementById("fever-title");
+const feverCountdownEl = document.getElementById("fever-countdown");
+const feverVignette = document.getElementById("fever-vignette");
+const timeBonusOverlay = document.getElementById("time-bonus-overlay");
+const timeBonusTitle = document.getElementById("time-bonus-title");
+const timeBonusCountdownEl = document.getElementById("time-bonus-countdown");
+const timerBar = document.getElementById("timer-bar");
+const timerTrack = document.querySelector(".hud__timer-track");
 
 const EQUATION_STATES = [
   "equation--idle",
@@ -159,7 +183,7 @@ function quitGame() {
     animationFrameId = null;
   }
 
-  showResultScreen("게임을 종료했습니다.");
+  showResultScreen("You quit the game.");
 }
 
 const audio = createAudioEngine();
@@ -188,15 +212,47 @@ let hintCooldown = 0;
 let idleSinceMatch = 0;
 let hintedBalls = [];
 let pendingAddSpawns = 0;
+let feverActive = false;
+/** @type {'play'|null} */
+let feverPhase = null;
+let feverTimer = 0;
+let feverCountdownStep = FEVER_COUNTDOWN_SECONDS;
+let feverTier = 1;
+let feverSpawnCooldown = 0;
+let feverMeteorCooldown = 0;
+/** @type {MeteorStreak[]} */
+let meteorStreaks = [];
+let timeBonusActive = false;
+let timeBonusTimer = 0;
+let timeBonusCountdownStep = BONUS_COUNTDOWN_SECONDS;
+let lastTimeBonusTier = 0;
+let pendingTimeBonus = false;
+let dangerZoneEnterCount = 0;
+let wasInDangerTime = false;
 
 const bgm = createChain10Bgm(audio, {
   getGameActive: () => gameActive && !gamePaused,
   getTimeLeft: () => timeLeft,
+  getFeverActive: () => feverActive,
+  getFeverTier: () => feverTier,
+  getTimeBonusActive: () => timeBonusActive,
 });
 
 function playSfx(type, selectCount = 1) {
   if (type === "combo") {
     sfx.play(type, selectCount, getComboSfxPitchUp(selectCount));
+    return;
+  }
+  if (type === "perfect") {
+    sfx.play(type, selectCount, getPerfectSfxPitchUp(selectCount));
+    return;
+  }
+  if (type === "hurryUp") {
+    sfx.play(type, 1, HURRY_UP_PITCH);
+    return;
+  }
+  if (type === "bonus") {
+    sfx.play(type, 1, BONUS_PITCH);
     return;
   }
   sfx.play(type, selectCount);
@@ -208,6 +264,25 @@ function startBgmEngine() {
 
 function stopBgmEngine() {
   bgm.stop();
+}
+
+function updateDangerVoice() {
+  const inDangerTime =
+    !feverActive && !timeBonusActive && timeLeft < DANGER_TIME_THRESHOLD;
+
+  if (!inDangerTime) {
+    wasInDangerTime = false;
+    return;
+  }
+
+  if (wasInDangerTime) return;
+
+  wasInDangerTime = true;
+  dangerZoneEnterCount++;
+
+  if (dangerZoneEnterCount % HURRY_UP_PLAY_EVERY === 1) {
+    playSfx("hurryUp");
+  }
 }
 
 // 폭죽 스파크 입자 모델
@@ -238,6 +313,57 @@ class PopParticle {
     ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// FEVER 유성우 스트릭
+class MeteorStreak {
+  constructor(displayWidth) {
+    this.x = Math.random() * displayWidth * 1.15 - displayWidth * 0.08;
+    this.y = -20 - Math.random() * 140;
+    this.vx = (Math.random() - 0.5) * 5;
+    this.vy = 11 + Math.random() * 16;
+    this.width = 1.5 + Math.random() * 3;
+    this.alpha = 0.75 + Math.random() * 0.25;
+    this.decay = 0.003 + Math.random() * 0.004;
+    this.color = Math.random() > 0.25 ? GOLDEN_TEN_GLOW : "#FFFFFF";
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.alpha -= this.decay;
+  }
+
+  draw() {
+    if (this.alpha <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = this.alpha;
+    ctx.lineCap = "round";
+
+    const tailX = this.x - this.vx * 7;
+    const tailY = this.y - this.vy * 3.5;
+    const grad = ctx.createLinearGradient(tailX, tailY, this.x, this.y);
+    grad.addColorStop(0, "rgba(255, 215, 0, 0)");
+    grad.addColorStop(0.45, this.color);
+    grad.addColorStop(1, "#FFFFFF");
+
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = this.width;
+    ctx.shadowBlur = 14;
+    ctx.shadowColor = "#FFD700";
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(this.x, this.y);
+    ctx.stroke();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = GOLDEN_TEN_COLOR;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.width + 1.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -286,6 +412,10 @@ class Ball {
     this.pulseTimer = 0;
     this.hintGlowTimer = 0;
     this.droppingFromAdd = false;
+    this.isGoldenTen = false;
+    this.isTimeBonusFive = false;
+    this.timeBonusOriginalNumber = null;
+    this.goldenPulse = Math.random() * Math.PI * 2;
   }
 
   update() {
@@ -320,7 +450,21 @@ class Ball {
 
     let visualRadius = this.radius;
 
-    if (this.selected) {
+    if (this.isGoldenTen) {
+      this.goldenPulse += 0.14;
+      const glow = 0.55 + Math.sin(this.goldenPulse) * 0.2;
+      visualRadius *= 1.05 + Math.sin(this.goldenPulse) * 0.04;
+      ctx.shadowBlur = 24;
+      ctx.shadowColor = `rgba(255, 215, 0, ${glow})`;
+      ctx.fillStyle = GOLDEN_TEN_COLOR;
+    } else if (this.isTimeBonusFive) {
+      this.goldenPulse += 0.12;
+      const glow = 0.45 + Math.sin(this.goldenPulse) * 0.18;
+      visualRadius *= 1.04 + Math.sin(this.goldenPulse) * 0.03;
+      ctx.shadowBlur = 20;
+      ctx.shadowColor = `rgba(167, 139, 250, ${glow})`;
+      ctx.fillStyle = COLOR_MAP[5];
+    } else if (this.selected) {
       this.pulseTimer += 0.25;
       const scaleFactor = 1.12 + Math.sin(this.pulseTimer) * 0.05;
       visualRadius *= scaleFactor;
@@ -329,25 +473,31 @@ class Ball {
       ctx.shadowColor = "#ffffff";
       ctx.fillStyle = "#ffffff";
     } else {
-      ctx.shadowBlur = 6;
-      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = 0;
       ctx.fillStyle = this.color;
     }
 
     ctx.arc(this.x, this.y, visualRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // 3D 구체 질감 그라디언트 쉐이더 매핑
+    // 가벼운 캔디 하이라이트 (중앙 숫자 영역은 덜 덮음)
     const grad = ctx.createRadialGradient(
-      this.x - visualRadius * 0.35,
-      this.y - visualRadius * 0.35,
-      visualRadius * 0.05,
+      this.x - visualRadius * 0.42,
+      this.y - visualRadius * 0.42,
+      visualRadius * 0.08,
       this.x,
       this.y,
       visualRadius,
     );
-    grad.addColorStop(0, "rgba(255, 255, 255, 0.45)");
-    grad.addColorStop(1, "rgba(0, 0, 0, 0.25)");
+    if (this.isGoldenTen || this.isTimeBonusFive || this.selected) {
+      grad.addColorStop(0, "rgba(255, 255, 255, 0.45)");
+      grad.addColorStop(1, "rgba(0, 0, 0, 0.22)");
+    } else {
+      grad.addColorStop(0, "rgba(255, 255, 255, 0.38)");
+      grad.addColorStop(0.42, "rgba(255, 255, 255, 0.06)");
+      grad.addColorStop(0.78, "rgba(255, 255, 255, 0)");
+      grad.addColorStop(1, "rgba(0, 0, 0, 0.1)");
+    }
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(this.x, this.y, visualRadius, 0, Math.PI * 2);
@@ -371,13 +521,36 @@ class Ball {
 
     // 숫자 서체 렌더링 (구슬 반지름에 비례해 크기 조정)
     const fontSize = Math.round(visualRadius * 1.15);
+    const label = String(this.number);
     ctx.font = `900 ${fontSize}px Impact, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = this.selected ? "#050508" : "#ffffff";
-    ctx.shadowColor = "rgba(0,0,0,0.4)";
-    ctx.shadowBlur = 3;
-    ctx.fillText(this.number, this.x, this.y + 1);
+    ctx.shadowBlur = 0;
+
+    if (this.selected) {
+      ctx.fillStyle = "#050508";
+      ctx.fillText(label, this.x, this.y + 1);
+    } else {
+      ctx.lineWidth = Math.max(2, Math.round(fontSize * 0.1));
+      ctx.strokeStyle = "rgba(20, 20, 28, 0.42)";
+      ctx.fillStyle = "#ffffff";
+      ctx.strokeText(label, this.x, this.y + 1);
+      ctx.fillText(label, this.x, this.y + 1);
+    }
+
+    if (this.isGoldenTen) {
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, visualRadius + 2, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (this.isTimeBonusFive) {
+      ctx.strokeStyle = "rgba(196, 181, 253, 0.65)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, visualRadius + 2, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
 }
 
@@ -428,6 +601,9 @@ function spawnBall(customX = null, customY = null, { fromAdd = false } = {}) {
   const number = Math.floor(Math.random() * 9) + 1;
   const ball = new Ball(x, y, number);
   ball.droppingFromAdd = fromAdd;
+  if (timeBonusActive) {
+    convertBallToTimeBonusFive(ball);
+  }
   balls.push(ball);
   if (fromAdd) {
     pendingAddSpawns = Math.max(0, pendingAddSpawns - 1);
@@ -506,6 +682,8 @@ function updateHintButtonState() {
   btn.disabled =
     !gameActive ||
     gamePaused ||
+    feverActive ||
+    timeBonusActive ||
     penaltyTime > 0 ||
     hintCooldown > 0 ||
     balls.length < 2;
@@ -569,34 +747,55 @@ function updateAddBallButtonState() {
     !gameActive ||
     gamePaused ||
     gameEndingState ||
+    feverActive ||
+    timeBonusActive ||
     penaltyTime > 0 ||
     dropping ||
     stackFull;
 
   btn.disabled = blocked;
   if (dropping) {
-    btn.title = "구슬이 떨어지는 중…";
+    btn.title = "Marbles are dropping…";
   } else if (stackFull) {
-    btn.title = "구슬이 너무 많이 쌓였습니다";
+    btn.title = "Too many marbles stacked";
   } else {
-    btn.title = "구슬 추가";
+    btn.title = "Add marbles";
   }
 }
 
 function updatePlayDockButtons() {
   updateHintButtonState();
   updateAddBallButtonState();
+
+  const shuffleBtn = document.getElementById("btn-shuffle");
+  const pauseBtn = document.getElementById("btn-pause");
+  const dockBlocked =
+    feverActive ||
+    timeBonusActive ||
+    !gameActive ||
+    gamePaused ||
+    gameEndingState ||
+    penaltyTime > 0;
+  if (shuffleBtn) shuffleBtn.disabled = dockBlocked;
+  if (pauseBtn) pauseBtn.disabled = dockBlocked;
 }
 
 function showHint(isAuto = false) {
-  if (!gameActive || gamePaused || penaltyTime > 0 || hintCooldown > 0)
+  if (
+    !gameActive ||
+    gamePaused ||
+    feverActive ||
+    timeBonusActive ||
+    penaltyTime > 0 ||
+    hintCooldown > 0
+  )
     return false;
 
   const combo = findHintCombination();
   if (!combo) {
     if (!isAuto) {
       const eqDiv = document.getElementById("equation");
-      eqDiv.innerText = "지금은 10 조합이 없어요";
+      eqDiv.innerText = "No combo to 10 right now";
       setEquationState(eqDiv, "warning");
       setTimeout(updateEquation, 1500);
     }
@@ -624,7 +823,7 @@ function showHint(isAuto = false) {
     new FloatingText(
       centroidX,
       centroidY - 20,
-      isAuto ? "힌트!" : "💡 HINT",
+      isAuto ? "Hint!" : "💡 HINT",
       "#FBBF24",
     ),
   );
@@ -661,7 +860,12 @@ function triggerScreenShake(isHeavy = false) {
 function updateEquation() {
   const eqDiv = document.getElementById("equation");
   if (selectedBalls.length === 0) {
-    eqDiv.innerHTML = "대기 중";
+    if (timeBonusActive) {
+      eqDiv.innerText = `TIME BONUS ${timeBonusCountdownStep}`;
+      setEquationState(eqDiv, "hint");
+      return;
+    }
+    eqDiv.innerHTML = "Waiting";
     setEquationState(eqDiv, "idle");
     return;
   }
@@ -764,18 +968,35 @@ function formatComboDisplay(comboLevel) {
   return `${comboLevel}${COMBO_DISPLAY_SUFFIX}`;
 }
 
+/** FEVER 구간마다 콤보 SFX pitch를 1부터 다시 올림 (7콤보→리셋→8콤보=1콤보 pitch) */
+function getComboPitchLevel(comboLevel) {
+  if (comboLevel <= 0) return 0;
+  return ((comboLevel - 1) % FEVER_COMBO_INTERVAL) + 1;
+}
+
 function getComboPitchSteps(comboLevel) {
-  return Math.max(comboLevel - 1, 0);
+  return Math.max(getComboPitchLevel(comboLevel) - 1, 0);
 }
 
 function applyComboPitchCap(value) {
   return COMBO_PITCH_MAX == null ? value : Math.min(value, COMBO_PITCH_MAX);
 }
 
+function applyPerfectPitchCap(value) {
+  return PERFECT_PITCH_MAX == null ? value : Math.min(value, PERFECT_PITCH_MAX);
+}
+
 function getComboSfxPitchUp(comboLevel) {
   const rate =
     COMBO_PITCH_START + getComboPitchSteps(comboLevel) * COMBO_PITCH_STEP;
   return applyComboPitchCap(Math.max(rate, 0.5));
+}
+
+/** @param {number} [tier] FEVER 단계 (1=10콤보, 2=20콤보…) */
+function getPerfectSfxPitchUp(tier = 1) {
+  const steps = Math.max(tier - 1, 0);
+  const rate = PERFECT_PITCH_START + steps * PERFECT_PITCH_STEP;
+  return applyPerfectPitchCap(Math.max(rate, 0.5));
 }
 
 function updateComboPopupText(comboLevel) {
@@ -814,6 +1035,382 @@ function triggerComboCelebration(combo) {
   setTimeout(() => {
     popup.classList.remove("combo-popup--show");
   }, 800);
+}
+
+function shouldTriggerFever(comboLevel) {
+  return (
+    comboLevel >= FEVER_COMBO_INTERVAL &&
+    comboLevel % FEVER_COMBO_INTERVAL === 0
+  );
+}
+
+function resetFeverState() {
+  feverActive = false;
+  feverPhase = null;
+  feverTimer = 0;
+  feverCountdownStep = FEVER_COUNTDOWN_SECONDS;
+  feverTier = 1;
+  feverSpawnCooldown = 0;
+  feverMeteorCooldown = 0;
+  meteorStreaks = [];
+  feverOverlay?.classList.add("hidden");
+  feverOverlay?.classList.remove("fever-overlay--play");
+  feverVignette?.classList.remove("fever-vignette--active");
+  gameContainer?.classList.remove("game-container--fever");
+  timerBar?.classList.remove("timer-bar--frozen", "timer-bar--danger");
+  timerTrack?.classList.remove("hud__timer-track--frozen");
+}
+
+function convertBallToGoldenTen(ball) {
+  ball.number = 10;
+  ball.isGoldenTen = true;
+  ball.color = GOLDEN_TEN_COLOR;
+  ball.selected = false;
+  ball.hintGlowTimer = 0;
+}
+
+function convertAllBallsToGoldenTen() {
+  balls.forEach(convertBallToGoldenTen);
+}
+
+function spawnGoldenTenBall() {
+  const displayWidth = getDisplaySize().width;
+  const margin = BALL_RADIUS * 2;
+  const x = margin + Math.random() * (displayWidth - margin * 2);
+  const ball = new Ball(x, -BALL_RADIUS * 2, 10);
+  convertBallToGoldenTen(ball);
+  ball.vy = 2.5 + Math.random() * 2;
+  balls.push(ball);
+}
+
+function spawnMeteorStreaks(count = 1) {
+  const displayWidth = getDisplaySize().width;
+  for (let i = 0; i < count; i++) {
+    meteorStreaks.push(new MeteorStreak(displayWidth));
+  }
+}
+
+function burstFeverMeteors(count = 24) {
+  spawnMeteorStreaks(count);
+}
+
+function syncFeverOverlay() {
+  if (!feverOverlay) return;
+
+  if (!feverActive) {
+    feverOverlay.classList.add("hidden");
+    feverOverlay.classList.remove("fever-overlay--play");
+    return;
+  }
+
+  feverOverlay.classList.remove("hidden");
+  feverOverlay.classList.add("fever-overlay--play");
+  feverTitle?.classList.remove("hidden");
+  if (feverTitle) feverTitle.textContent = "PERFECT TEN!";
+  feverCountdownEl?.classList.remove("hidden");
+  if (feverCountdownEl) {
+    feverCountdownEl.textContent = String(feverCountdownStep);
+    feverCountdownEl.classList.remove("fever-overlay__countdown--pop");
+    void feverCountdownEl.offsetWidth;
+    feverCountdownEl.classList.add("fever-overlay__countdown--pop");
+  }
+}
+
+function updateFeverEquation() {
+  const eqDiv = document.getElementById("equation");
+  if (!eqDiv || feverPhase !== "play") return;
+
+  eqDiv.innerText = `Tap golden 10! ${feverCountdownStep}`;
+  setEquationState(eqDiv, "success");
+}
+
+function setTimerFrozenUI(frozen) {
+  timerBar?.classList.toggle("timer-bar--frozen", frozen);
+  timerTrack?.classList.toggle("hud__timer-track--frozen", frozen);
+  if (frozen) {
+    timerBar?.classList.remove("timer-bar--danger");
+  }
+}
+
+function startPerfectTenFever(comboLevel) {
+  feverActive = true;
+  feverPhase = "play";
+  feverCountdownStep = FEVER_COUNTDOWN_SECONDS;
+  feverTimer = TARGET_FPS;
+  feverTier = Math.max(1, Math.floor(comboLevel / FEVER_COMBO_INTERVAL));
+  feverSpawnCooldown = 0;
+  pendingAddSpawns = 0;
+  selectedBalls = [];
+  clearHint();
+
+  convertAllBallsToGoldenTen();
+  for (let i = 0; i < 3; i++) {
+    spawnGoldenTenBall();
+  }
+  burstFeverMeteors(35);
+  feverMeteorCooldown = 0;
+
+  gameContainer?.classList.add("game-container--fever");
+  feverVignette?.classList.add("fever-vignette--active");
+  setTimerFrozenUI(true);
+  bgm.resetStep();
+  syncFeverOverlay();
+  updateFeverEquation();
+  playSfx("perfect", feverTier);
+  triggerHaptic("perfect");
+  triggerScreenShake(true);
+
+  const displayWidth = getDisplaySize().width;
+  const displayHeight = getDisplaySize().height;
+  for (let i = 0; i < 40; i++) {
+    particles.push(
+      new PopParticle(
+        Math.random() * displayWidth,
+        Math.random() * displayHeight * 0.5,
+        GOLDEN_TEN_GLOW,
+        true,
+      ),
+    );
+  }
+  for (let i = 0; i < 25; i++) {
+    particles.push(
+      new PopParticle(
+        displayWidth / 2 + (Math.random() - 0.5) * displayWidth,
+        -20 + Math.random() * displayHeight * 0.3,
+        "#FFFFFF",
+        true,
+      ),
+    );
+  }
+}
+
+function endPerfectTenFever() {
+  balls.forEach((ball) => {
+    if (!ball.isGoldenTen) return;
+    ball.isGoldenTen = false;
+    ball.number = Math.floor(Math.random() * 9) + 1;
+    ball.color = COLOR_MAP[ball.number];
+  });
+
+  resetFeverState();
+  updateEquation();
+
+  if (pendingTimeBonus) {
+    pendingTimeBonus = false;
+    startTimeBonus();
+  } else {
+    updateTimeBonusTrigger();
+  }
+}
+
+function resetTimeBonusState() {
+  timeBonusActive = false;
+  timeBonusTimer = 0;
+  timeBonusCountdownStep = BONUS_COUNTDOWN_SECONDS;
+  timeBonusOverlay?.classList.add("hidden");
+  timeBonusOverlay?.classList.remove("time-bonus-overlay--play");
+  gameContainer?.classList.remove("game-container--time-bonus");
+  if (!feverActive) {
+    timerBar?.classList.remove("timer-bar--frozen", "timer-bar--danger");
+    timerTrack?.classList.remove("hud__timer-track--frozen");
+  }
+}
+
+function convertBallToTimeBonusFive(ball) {
+  if (ball.isGoldenTen) return;
+  if (!ball.isTimeBonusFive) {
+    ball.timeBonusOriginalNumber = ball.number;
+  }
+  ball.isTimeBonusFive = true;
+  ball.number = 5;
+  ball.color = COLOR_MAP[5];
+  ball.selected = false;
+  ball.hintGlowTimer = 0;
+}
+
+function convertAllBallsToTimeBonusFive() {
+  balls.forEach(convertBallToTimeBonusFive);
+}
+
+function restoreTimeBonusBalls() {
+  balls.forEach((ball) => {
+    if (!ball.isTimeBonusFive) return;
+    ball.isTimeBonusFive = false;
+    ball.number =
+      ball.timeBonusOriginalNumber ?? Math.floor(Math.random() * 9) + 1;
+    ball.timeBonusOriginalNumber = null;
+    ball.color = COLOR_MAP[ball.number];
+  });
+}
+
+function cancelTimeBonus() {
+  if (!timeBonusActive) return;
+  restoreTimeBonusBalls();
+  resetTimeBonusState();
+}
+
+function syncTimeBonusOverlay() {
+  if (!timeBonusOverlay) return;
+
+  if (!timeBonusActive) {
+    timeBonusOverlay.classList.add("hidden");
+    timeBonusOverlay.classList.remove("time-bonus-overlay--play");
+    return;
+  }
+
+  timeBonusOverlay.classList.remove("hidden");
+  timeBonusOverlay.classList.add("time-bonus-overlay--play");
+  timeBonusTitle?.classList.remove("hidden");
+  if (timeBonusTitle) timeBonusTitle.textContent = "TIME BONUS";
+  timeBonusCountdownEl?.classList.remove("hidden");
+  if (timeBonusCountdownEl) {
+    timeBonusCountdownEl.textContent = String(timeBonusCountdownStep);
+    timeBonusCountdownEl.classList.remove("time-bonus-overlay__countdown--pop");
+    void timeBonusCountdownEl.offsetWidth;
+    timeBonusCountdownEl.classList.add("time-bonus-overlay__countdown--pop");
+  }
+}
+
+function updateTimeBonusEquation() {
+  if (!timeBonusActive) return;
+  updateEquation();
+}
+
+function updateTimeBonusTrigger() {
+  if (timeBonusActive) return;
+  const tier = Math.floor(playTime / BONUS_SURVIVAL_INTERVAL);
+  if (tier <= lastTimeBonusTier) return;
+
+  if (feverActive) {
+    pendingTimeBonus = true;
+    lastTimeBonusTier = tier;
+    return;
+  }
+
+  lastTimeBonusTier = tier;
+  startTimeBonus();
+}
+
+function startTimeBonus() {
+  if (feverActive || timeBonusActive) return;
+
+  timeBonusActive = true;
+  timeBonusCountdownStep = BONUS_COUNTDOWN_SECONDS;
+  timeBonusTimer = TARGET_FPS;
+  pendingAddSpawns = 0;
+  selectedBalls = [];
+  clearHint();
+
+  convertAllBallsToTimeBonusFive();
+
+  gameContainer?.classList.add("game-container--time-bonus");
+  setTimerFrozenUI(true);
+  bgm.resetStep();
+  syncTimeBonusOverlay();
+  updateTimeBonusEquation();
+  playSfx("bonus");
+  triggerHaptic("combo");
+  triggerScreenShake(false);
+
+  const displayWidth = getDisplaySize().width;
+  const displayHeight = getDisplaySize().height;
+  for (let i = 0; i < 35; i++) {
+    particles.push(
+      new PopParticle(
+        Math.random() * displayWidth,
+        Math.random() * displayHeight * 0.55,
+        i % 2 === 0 ? "#A78BFA" : COLOR_MAP[5],
+        true,
+      ),
+    );
+  }
+}
+
+function endTimeBonus() {
+  restoreTimeBonusBalls();
+  resetTimeBonusState();
+  updateEquation();
+}
+
+function updateTimeBonusMode() {
+  timeBonusTimer--;
+  if (timeBonusTimer <= 0) {
+    timeBonusCountdownStep--;
+    if (timeBonusCountdownStep <= 0) {
+      endTimeBonus();
+    } else {
+      timeBonusTimer = TARGET_FPS;
+      syncTimeBonusOverlay();
+      updateTimeBonusEquation();
+    }
+  }
+}
+
+function popGoldenTen(ball, index) {
+  const points = FEVER_GOLDEN_SCORE * feverTier;
+  score += points;
+  document.getElementById("score").innerText = score;
+
+  for (let p = 0; p < 18; p++) {
+    particles.push(new PopParticle(ball.x, ball.y, GOLDEN_TEN_GLOW, p % 3 === 0));
+  }
+  spawnMeteorStreaks(2);
+  floatingTexts.push(
+    new FloatingText(ball.x, ball.y - 10, `+${points}`, "#FFD700"),
+  );
+
+  playSfx("tap");
+  triggerHaptic("pop");
+  balls.splice(index, 1);
+}
+
+function handleGoldenTenTap(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const displayWidth = getDisplaySize().width;
+  const displayHeight = getDisplaySize().height;
+  const touchX = ((clientX - rect.left) / rect.width) * displayWidth;
+  const touchY = ((clientY - rect.top) / rect.height) * displayHeight;
+
+  for (let i = balls.length - 1; i >= 0; i--) {
+    const b = balls[i];
+    if (!b.isGoldenTen) continue;
+
+    const dx = touchX - b.x;
+    const dy = touchY - b.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < b.radius * 1.08) {
+      popGoldenTen(b, i);
+      break;
+    }
+  }
+}
+
+function updateFeverMode() {
+  if (feverPhase !== "play") return;
+
+  feverSpawnCooldown--;
+  if (feverSpawnCooldown <= 0) {
+    spawnGoldenTenBall();
+    feverSpawnCooldown = FEVER_SPAWN_INTERVAL;
+  }
+
+  feverMeteorCooldown--;
+  if (feverMeteorCooldown <= 0) {
+    spawnMeteorStreaks(2 + Math.floor(Math.random() * 3));
+    feverMeteorCooldown = FEVER_METEOR_SPAWN_INTERVAL;
+  }
+
+  feverTimer--;
+  if (feverTimer <= 0) {
+    feverCountdownStep--;
+    if (feverCountdownStep <= 0) {
+      endPerfectTenFever();
+    } else {
+      feverTimer = TARGET_FPS;
+      syncFeverOverlay();
+      updateFeverEquation();
+    }
+  }
 }
 
 // 정확한 10 합산 검사기
@@ -874,6 +1471,15 @@ function checkSum() {
     balls = balls.filter((b) => !selectedBalls.includes(b));
     selectedBalls = [];
 
+    if (shouldTriggerFever(comboLevel)) {
+      if (timeBonusActive) {
+        cancelTimeBonus();
+      }
+      startPerfectTenFever(comboLevel);
+      updateEquation();
+      return;
+    }
+
     // 전멸 처리 되었는지 정밀 체크 -> 🌟 퍼펙트 클리어 보너스 시그널 개시!
     if (balls.length === 0) {
       triggerPerfectClear();
@@ -920,6 +1526,13 @@ function checkSum() {
 // 반응형 화면 좌표 오차 제로 보정 계산기
 function handleTap(clientX, clientY) {
   if (!gameActive || gamePaused || penaltyTime > 0) return;
+
+  if (feverActive) {
+    if (feverPhase === "play") {
+      handleGoldenTenTap(clientX, clientY);
+    }
+    return;
+  }
 
   const rect = canvas.getBoundingClientRect();
   const displayWidth = getDisplaySize().width;
@@ -982,6 +1595,11 @@ canvas.addEventListener(
 
 // 오버플로우 패배 선형 체크 (아래에서 쌓여 선을 넘은 구슬만 — 낙하 중인 새 구슬 제외)
 function checkStackOver() {
+  if (feverActive || timeBonusActive) {
+    stackOverTime = 0;
+    return;
+  }
+
   const breached = balls.some((b) => {
     const top = b.y - b.radius;
     const stackedAtLine = b.y > DEADLINE_Y && top < DEADLINE_Y;
@@ -994,7 +1612,7 @@ function checkStackOver() {
   if (breached) {
     stackOverTime += 1;
     if (stackOverTime > STACK_OVER_LIMIT) {
-      endGame("구슬이 한계선을 넘쳐 무너졌습니다!");
+      endGame("Marbles collapsed past the limit line!");
     }
   } else {
     stackOverTime = 0;
@@ -1014,11 +1632,28 @@ function loop(timestamp) {
   ctx.clearRect(0, 0, displayWidth, displayHeight);
 
   // 1. 위기 상황에 따른 격렬한 쉐이킹 번역 처리
-  const dangerActive = timeLeft < DANGER_TIME_THRESHOLD;
+  const dangerActive =
+    !feverActive && !timeBonusActive && timeLeft < DANGER_TIME_THRESHOLD;
   const dangerVignette = document.getElementById("danger-vignette");
 
   ctx.save();
-  if (dangerActive) {
+  if (feverActive) {
+    dangerVignette.style.opacity = "0";
+    dangerVignette.classList.remove("pulse-danger-active");
+    const pulse = 3.5 + Math.sin(timestamp / 55) * 2.5;
+    ctx.translate(
+      (Math.random() - 0.5) * pulse,
+      (Math.random() - 0.5) * pulse,
+    );
+  } else if (timeBonusActive) {
+    dangerVignette.style.opacity = "0";
+    dangerVignette.classList.remove("pulse-danger-active");
+    const pulse = 2.2 + Math.sin(timestamp / 70) * 1.6;
+    ctx.translate(
+      (Math.random() - 0.5) * pulse,
+      (Math.random() - 0.5) * pulse,
+    );
+  } else if (dangerActive) {
     dangerVignette.style.opacity = "1";
     dangerVignette.classList.add("pulse-danger-active");
 
@@ -1056,6 +1691,24 @@ function loop(timestamp) {
     ctx.fillText("WARNING! OVER THE LINE!", displayWidth / 2, DEADLINE_Y - 15);
   }
 
+  if (feverActive) {
+    ctx.save();
+    ctx.fillStyle = "rgba(255, 215, 0, 0.06)";
+    ctx.fillRect(0, 0, displayWidth, displayHeight);
+    ctx.restore();
+  } else if (timeBonusActive) {
+    ctx.save();
+    ctx.fillStyle = "rgba(167, 139, 250, 0.08)";
+    ctx.fillRect(0, 0, displayWidth, displayHeight);
+    ctx.restore();
+  }
+
+  meteorStreaks.forEach((m, idx) => {
+    m.update();
+    m.draw();
+    if (m.alpha <= 0) meteorStreaks.splice(idx, 1);
+  });
+
   // 3. 구슬 상태 업데이트 및 전사 드로잉
   balls.forEach((b) => b.update());
   resolveCollisions();
@@ -1084,7 +1737,7 @@ function loop(timestamp) {
 
   // 7b. 힌트 쿨다운·유휴·자동 힌트
   if (hintCooldown > 0) hintCooldown--;
-  if (selectedBalls.length === 0 && penaltyTime === 0) {
+  if (!feverActive && !timeBonusActive && selectedBalls.length === 0 && penaltyTime === 0) {
     idleSinceMatch++;
     if (
       idleSinceMatch >= HINT_IDLE_TIME &&
@@ -1097,36 +1750,45 @@ function loop(timestamp) {
   updatePlayDockButtons();
 
   // 8. 콤보 무효화 기한 차감
-  if (comboResetTimer > 0) {
+  if (!feverActive && comboResetTimer > 0) {
     comboResetTimer--;
     if (comboResetTimer <= 0) {
       matchStreak = 0;
     }
   }
 
-  // 9. 제한 시간 정규 차감 (서바이벌이 누적될수록 난이도 차감 속도 동적 소폭 가속화)
-  const surviveInSeconds = playTime / TARGET_FPS;
-  const decayScaling = 1.0 + surviveInSeconds * TIME_DECAY_SCALE;
-  timeLeft -= decayScaling;
-
-  playTime++;
-
-  // HUD 타이머 바 갱신
-  const timerBar = document.getElementById("timer-bar");
-  const percent = (timeLeft / MAX_TIME) * 100;
-  timerBar.style.width = `${Math.max(0, percent)}%`;
-  document.getElementById("timer-text").innerText = Math.max(
-    0,
-    timeLeft / TARGET_FPS,
-  ).toFixed(2);
-
-  if (percent < 30) {
-    timerBar.classList.add("timer-bar--danger");
+  if (feverActive) {
+    updateFeverMode();
+  } else if (timeBonusActive) {
+    updateTimeBonusMode();
   } else {
-    timerBar.classList.remove("timer-bar--danger");
+    const surviveInSeconds = playTime / TARGET_FPS;
+    const decayScaling = 1.0 + surviveInSeconds * TIME_DECAY_SCALE;
+    timeLeft -= decayScaling;
+    playTime++;
+    updateDangerVoice();
+    updateTimeBonusTrigger();
   }
 
-  // 생존 버틴 실시간 시간 계산 (mm:ss)
+  // HUD 타이머 바 갱신
+  const percent = (timeLeft / MAX_TIME) * 100;
+  if (!feverActive && !timeBonusActive) {
+    timerBar.style.width = `${Math.max(0, percent)}%`;
+    document.getElementById("timer-text").innerText = Math.max(
+      0,
+      timeLeft / TARGET_FPS,
+    ).toFixed(2);
+
+    if (percent < 30) {
+      timerBar.classList.add("timer-bar--danger");
+    } else {
+      timerBar.classList.remove("timer-bar--danger");
+    }
+  } else {
+    setTimerFrozenUI(true);
+  }
+
+  const surviveInSeconds = playTime / TARGET_FPS;
   const m = Math.floor(surviveInSeconds / 60)
     .toString()
     .padStart(2, "0");
@@ -1140,8 +1802,8 @@ function loop(timestamp) {
   ctx.restore(); // 진동 오프셋 해제 복구
 
   // 게임 패배 여부 체크 후 재순환
-  if (timeLeft <= 0) {
-    endGame("제한 시간이 모두 초과되었습니다.");
+  if (!feverActive && !timeBonusActive && timeLeft <= 0) {
+    endGame("Time ran out.");
   } else {
     animationFrameId = requestAnimationFrame(loop);
   }
@@ -1166,6 +1828,12 @@ function startGame() {
   hintCooldown = 0;
   idleSinceMatch = 0;
   pendingAddSpawns = 0;
+  dangerZoneEnterCount = 0;
+  wasInDangerTime = false;
+  lastTimeBonusTier = 0;
+  pendingTimeBonus = false;
+  resetFeverState();
+  resetTimeBonusState();
   bgm.resetStep();
 
   document.getElementById("score").innerText = score;
@@ -1184,7 +1852,7 @@ function startGame() {
 
   queueMicrotask(() => {
     audio.primeFromGesture();
-    void audio.ensureRunning().then(() => sfx.preloadCombo());
+    void audio.ensureRunning().then(() => sfx.preloadVoiceSamples());
   });
 }
 
@@ -1195,6 +1863,8 @@ function endGame(reason) {
   hidePauseOverlay();
   gameEndingState = true;
   gameActive = false;
+  resetFeverState();
+  resetTimeBonusState();
 
   stopBgmEngine();
 

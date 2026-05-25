@@ -533,6 +533,17 @@
             background: #ef4444;
             animation: ui-pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
+        .timer-bar--frozen {
+            background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 50%, #eab308 100%);
+            animation: timer-frozen-pulse 1.2s ease-in-out infinite;
+        }
+        @keyframes timer-frozen-pulse {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.15); }
+        }
+        .hud__timer-track--frozen {
+            box-shadow: 0 0 12px rgba(251, 191, 36, 0.45);
+        }
         .hud__timer-label {
             display: flex;
             justify-content: flex-end;
@@ -727,6 +738,150 @@
         @keyframes comboTextGlow {
             0%, 100% { filter: drop-shadow(0 0 14px rgba(45, 212, 191, 0.85)) drop-shadow(0 3px 0 rgba(0, 0, 0, 0.35)); }
             50% { filter: drop-shadow(0 0 28px rgba(110, 231, 183, 1)) drop-shadow(0 3px 0 rgba(0, 0, 0, 0.35)); }
+        }
+
+        .fever-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 45;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            pointer-events: none;
+            background: radial-gradient(
+                circle at center,
+                rgba(251, 191, 36, 0.18) 0%,
+                rgba(9, 9, 11, 0.55) 55%,
+                rgba(9, 9, 11, 0.82) 100%
+            );
+        }
+        .fever-overlay--play {
+            background: radial-gradient(
+                circle at center,
+                rgba(251, 191, 36, 0.08) 0%,
+                transparent 70%
+            );
+        }
+        .fever-overlay__title {
+            font-family: "Luckiest Guy", Impact, sans-serif;
+            font-size: clamp(2rem, 9vw, 3.25rem);
+            letter-spacing: 0.06em;
+            text-align: center;
+            color: #fff;
+            text-shadow:
+                0 0 18px rgba(251, 191, 36, 0.95),
+                0 3px 0 #b45309,
+                0 6px 16px rgba(0, 0, 0, 0.45);
+            animation: fever-title-pop 0.45s cubic-bezier(0.22, 1.15, 0.36, 1);
+        }
+        .fever-overlay__countdown {
+            font-family: "Luckiest Guy", Impact, sans-serif;
+            font-size: clamp(4rem, 22vw, 7rem);
+            line-height: 1;
+            color: #fde047;
+            text-shadow:
+                0 0 24px rgba(253, 224, 71, 0.95),
+                0 4px 0 #ca8a04,
+                0 8px 20px rgba(0, 0, 0, 0.5);
+        }
+        .fever-overlay__countdown--pop {
+            animation: fever-countdown-pop 0.35s cubic-bezier(0.22, 1.15, 0.36, 1);
+        }
+        @keyframes fever-title-pop {
+            0% { transform: scale(0.4); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes fever-countdown-pop {
+            0% { transform: scale(0.5); opacity: 0; }
+            60% { transform: scale(1.12); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .game-container--fever .canvas-area {
+            box-shadow: inset 0 0 40px rgba(251, 191, 36, 0.22);
+        }
+        .time-bonus-overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 44;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            pointer-events: none;
+            background: radial-gradient(
+                circle at center,
+                rgba(167, 139, 250, 0.2) 0%,
+                rgba(9, 9, 11, 0.55) 55%,
+                rgba(9, 9, 11, 0.82) 100%
+            );
+        }
+        .time-bonus-overlay--play {
+            background: radial-gradient(
+                circle at center,
+                rgba(45, 212, 191, 0.1) 0%,
+                transparent 70%
+            );
+        }
+        .time-bonus-overlay__title {
+            font-family: "Luckiest Guy", Impact, sans-serif;
+            font-size: clamp(1.85rem, 8.5vw, 3rem);
+            letter-spacing: 0.08em;
+            text-align: center;
+            color: #fff;
+            text-shadow:
+                0 0 18px rgba(167, 139, 250, 0.95),
+                0 3px 0 #6d28d9,
+                0 6px 16px rgba(0, 0, 0, 0.45);
+            animation: time-bonus-title-pop 0.45s cubic-bezier(0.22, 1.15, 0.36, 1);
+        }
+        .time-bonus-overlay__countdown {
+            font-family: "Luckiest Guy", Impact, sans-serif;
+            font-size: clamp(4rem, 22vw, 7rem);
+            line-height: 1;
+            color: #5eead4;
+            text-shadow:
+                0 0 24px rgba(94, 234, 212, 0.95),
+                0 4px 0 #0f766e,
+                0 8px 20px rgba(0, 0, 0, 0.5);
+        }
+        .time-bonus-overlay__countdown--pop {
+            animation: time-bonus-countdown-pop 0.35s cubic-bezier(0.22, 1.15, 0.36, 1);
+        }
+        @keyframes time-bonus-title-pop {
+            0% { transform: scale(0.4); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes time-bonus-countdown-pop {
+            0% { transform: scale(0.5); opacity: 0; }
+            60% { transform: scale(1.12); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .game-container--time-bonus .canvas-area {
+            box-shadow: inset 0 0 40px rgba(167, 139, 250, 0.22);
+        }
+        .fever-vignette {
+            position: absolute;
+            inset: 0;
+            z-index: 6;
+            pointer-events: none;
+            opacity: 0;
+            background:
+                radial-gradient(ellipse at 50% 0%, rgba(255, 236, 120, 0.35) 0%, transparent 55%),
+                radial-gradient(ellipse at 20% 80%, rgba(255, 215, 0, 0.2) 0%, transparent 45%),
+                radial-gradient(ellipse at 80% 70%, rgba(255, 180, 0, 0.18) 0%, transparent 40%),
+                linear-gradient(180deg, rgba(255, 215, 0, 0.12) 0%, transparent 35%, rgba(255, 140, 0, 0.08) 100%);
+            transition: opacity 0.25s ease;
+        }
+        .fever-vignette--active {
+            opacity: 1;
+            animation: fever-vignette-pulse 0.55s ease-in-out infinite alternate;
+        }
+        @keyframes fever-vignette-pulse {
+            0% { filter: brightness(1) saturate(1); }
+            100% { filter: brightness(1.18) saturate(1.35); }
         }
 
         /* 일시정지 오버레이 */

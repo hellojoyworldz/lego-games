@@ -1,44 +1,84 @@
+import {
+  COMBO_VOICE_FILE,
+  COMBO_VOICE_GAIN,
+  PERFECT_VOICE_FILE,
+  PERFECT_VOICE_GAIN,
+  HURRY_UP_VOICE_FILE,
+  HURRY_UP_VOICE_GAIN,
+  BONUS_VOICE_FILE,
+  BONUS_VOICE_GAIN,
+} from "../config.js";
+
 /**
- * Web Audio 합성 기반 범용 효과음 + 콤보 샘플
+ * Web Audio 합성 기반 범용 효과음 + 콤보/퍼펙트 샘플
  * @param {ReturnType<typeof import('./engine.js').createAudioEngine>} audio
  */
 export function createSynthSfx(audio) {
-  const COMBO_SAMPLE_URL = new URL(
-    "../../assets/audio/combo.mp3",
-    import.meta.url,
-  );
+  /**
+   * @param {string} relativePath
+   * @param {string} label
+   */
+  function createSampleLoader(relativePath, label) {
+    /** @type {AudioBuffer|null} */
+    let buffer = null;
+    /** @type {Promise<AudioBuffer|null>|null} */
+    let loadPromise = null;
 
-  /** @type {AudioBuffer|null} */
-  let comboBuffer = null;
-  /** @type {Promise<AudioBuffer|null>|null} */
-  let comboLoadPromise = null;
-
-  async function loadComboBuffer(audioCtx) {
-    if (comboBuffer) return comboBuffer;
-    if (!comboLoadPromise) {
-      comboLoadPromise = (async () => {
-        try {
-          const response = await fetch(COMBO_SAMPLE_URL.href);
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+    async function load(audioCtx) {
+      if (buffer) return buffer;
+      if (!loadPromise) {
+        loadPromise = (async () => {
+          try {
+            const response = await fetch(
+              new URL(`../../${relativePath}`, import.meta.url).href,
+            );
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            const data = await response.arrayBuffer();
+            buffer = await audioCtx.decodeAudioData(data.slice(0));
+            return buffer;
+          } catch (e) {
+            loadPromise = null;
+            console.warn(`${label} 샘플 로드 실패:`, e);
+            return null;
           }
-          const data = await response.arrayBuffer();
-          comboBuffer = await audioCtx.decodeAudioData(data.slice(0));
-          return comboBuffer;
-        } catch (e) {
-          comboLoadPromise = null;
-          console.warn("콤보 샘플 로드 실패:", e);
-          return null;
-        }
-      })();
+        })();
+      }
+      return loadPromise;
     }
-    return comboLoadPromise;
+
+    return { load };
   }
 
-  async function preloadCombo() {
-    const audioCtx = await audio.ensureRunning();
-    if (!audioCtx) return;
-    await loadComboBuffer(audioCtx);
+  const comboSample = createSampleLoader(COMBO_VOICE_FILE, "콤보");
+  const perfectSample = createSampleLoader(PERFECT_VOICE_FILE, "퍼펙트");
+  const hurryUpSample = createSampleLoader(HURRY_UP_VOICE_FILE, "허리업");
+  const bonusSample = createSampleLoader(BONUS_VOICE_FILE, "보너스");
+
+  /**
+   * @param {ReturnType<typeof createSampleLoader>} loader
+   * @param {AudioContext} audioCtx
+   * @param {number} pitchUp
+   * @param {number} gainValue
+   */
+  async function playVoiceSample(loader, audioCtx, pitchUp, gainValue) {
+    const buffer = await loader.load(audioCtx);
+    if (!buffer) return false;
+
+    const now = audioCtx.currentTime;
+    const source = audioCtx.createBufferSource();
+    const gain = audioCtx.createGain();
+    source.buffer = buffer;
+    source.playbackRate.value = pitchUp;
+    gain.gain.setValueAtTime(gainValue, now);
+    source.connect(gain).connect(audioCtx.destination);
+    source.start(now);
+    audio.scheduleCleanup(
+      [source, gain],
+      Math.ceil((buffer.duration / pitchUp) * 1000) + 100,
+    );
+    return true;
   }
 
   /**
@@ -47,7 +87,6 @@ export function createSynthSfx(audio) {
    * @param {number} now
    */
   function playComboSynthLayers(audioCtx, pitchUp, now) {
-    // 통통 튀는 보잉 (구슬 튕김 느낌)
     const boing = audioCtx.createOscillator();
     const boingGain = audioCtx.createGain();
     boing.type = "sine";
@@ -62,7 +101,6 @@ export function createSynthSfx(audio) {
     boing.stop(now + 0.22);
     audio.scheduleCleanup([boing, boingGain], 350);
 
-    // 마림바 아르페지오 (tap/pop과 같은 sine 계열)
     const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51];
     notes.forEach((f, idx) => {
       const t = now + idx * 0.05;
@@ -79,7 +117,6 @@ export function createSynthSfx(audio) {
       audio.scheduleCleanup([osc, gain], 400);
     });
 
-    // 짧은 팝 글로시 (sparkle)
     [1567.98, 1975.53].forEach((f, idx) => {
       const t = now + 0.14 + idx * 0.04;
       const osc = audioCtx.createOscillator();
@@ -96,27 +133,32 @@ export function createSynthSfx(audio) {
     });
   }
 
-  /**
-   * @param {AudioContext} audioCtx
-   * @param {number} pitchUp
-   * @param {number} now
-   */
-  async function playComboSample(audioCtx, pitchUp) {
-    const buffer = await loadComboBuffer(audioCtx);
-    if (!buffer) return;
+  /** @param {AudioContext} audioCtx @param {number} now */
+  function playPerfectSynthFallback(audioCtx, now) {
+    const melody = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98];
+    melody.forEach((f, i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.frequency.setValueAtTime(f, now + i * 0.08);
+      osc.type = "sine";
+      gain.gain.setValueAtTime(0.18, now + i * 0.08);
+      gain.gain.linearRampToValueAtTime(0, now + 0.4 + i * 0.08);
+      osc.start(now + i * 0.08);
+      osc.stop(now + 0.8);
+      audio.scheduleCleanup([osc, gain], 1200);
+    });
+  }
 
-    const now = audioCtx.currentTime;
-    const source = audioCtx.createBufferSource();
-    const gain = audioCtx.createGain();
-    source.buffer = buffer;
-    source.playbackRate.value = pitchUp;
-    gain.gain.setValueAtTime(0.9, now);
-    source.connect(gain).connect(audioCtx.destination);
-    source.start(now);
-    audio.scheduleCleanup(
-      [source, gain],
-      Math.ceil((buffer.duration / pitchUp) * 1000) + 100,
-    );
+  async function preloadVoiceSamples() {
+    const audioCtx = await audio.ensureRunning();
+    if (!audioCtx) return;
+    await Promise.all([
+      comboSample.load(audioCtx),
+      perfectSample.load(audioCtx),
+      hurryUpSample.load(audioCtx),
+      bonusSample.load(audioCtx),
+    ]);
   }
 
   /** @param {string} type @param {number} [selectCount] @param {number} [pitchUpOverride] */
@@ -162,7 +204,7 @@ export function createSynthSfx(audio) {
       } else if (type === "combo") {
         const pitchUp = pitchUpOverride ?? 1;
         playComboSynthLayers(audioCtx, pitchUp, now);
-        await playComboSample(audioCtx, pitchUp);
+        await playVoiceSample(comboSample, audioCtx, pitchUp, COMBO_VOICE_GAIN);
       } else if (type === "fail") {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
@@ -176,19 +218,22 @@ export function createSynthSfx(audio) {
         osc.stop(now + 0.3);
         audio.scheduleCleanup([osc, gain], 500);
       } else if (type === "perfect") {
-        const melody = [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98];
-        melody.forEach((f, i) => {
-          const osc = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
-          osc.connect(gain).connect(audioCtx.destination);
-          osc.frequency.setValueAtTime(f, now + i * 0.08);
-          osc.type = "sine";
-          gain.gain.setValueAtTime(0.18, now + i * 0.08);
-          gain.gain.linearRampToValueAtTime(0, now + 0.4 + i * 0.08);
-          osc.start(now + i * 0.08);
-          osc.stop(now + 0.8);
-          audio.scheduleCleanup([osc, gain], 1200);
-        });
+        const pitchUp = pitchUpOverride ?? 1;
+        const played = await playVoiceSample(
+          perfectSample,
+          audioCtx,
+          pitchUp,
+          PERFECT_VOICE_GAIN,
+        );
+        if (!played) {
+          playPerfectSynthFallback(audioCtx, now);
+        }
+      } else if (type === "hurryUp") {
+        const pitchUp = pitchUpOverride ?? 1;
+        await playVoiceSample(hurryUpSample, audioCtx, pitchUp, HURRY_UP_VOICE_GAIN);
+      } else if (type === "bonus") {
+        const pitchUp = pitchUpOverride ?? 1;
+        await playVoiceSample(bonusSample, audioCtx, pitchUp, BONUS_VOICE_GAIN);
       } else if (type === "tapestop") {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
@@ -207,5 +252,5 @@ export function createSynthSfx(audio) {
     }
   }
 
-  return { play, preloadCombo };
+  return { play, preloadVoiceSamples, preloadCombo: preloadVoiceSamples };
 }
