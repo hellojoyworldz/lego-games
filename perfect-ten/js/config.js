@@ -42,8 +42,28 @@ export const FEVER_SPAWN_INTERVAL = TARGET_FPS / 3; // 황금 10 낙하 간격(�
 export const FEVER_METEOR_SPAWN_INTERVAL = 2; // 유성우 스폰 간격(프레임)
 export const FEVER_BGM_BPM = 196; // FEVER BGM 템포
 export const FEVER_BGM_BPM_STEP = 10; // FEVER 단계마다 BPM 추가
-export const GOLDEN_TEN_COLOR = "#FFD700";
-export const GOLDEN_TEN_GLOW = "#FFF4A3";
+
+/** FEVER 황금 10 구슬 — fill·shadow·하이라이트·숫자 스타일 일괄 관리 */
+export const GOLDEN_TEN_BALL = {
+  fillTop: "#FFE066",
+  fillBottom: "#FFC400",
+  shadowRgb: "255, 196, 0",
+  shadowBlur: 22,
+  shadowGlowMin: 0.45,
+  shadowGlowAmp: 0.18,
+  pulseSpeed: 0.14,
+  radiusScale: 1.05,
+  radiusPulseAmp: 0.04,
+  highlightStops: [
+    [0, "rgba(255, 255, 255, 0.48)"],
+    [0.55, "rgba(255, 255, 255, 0.1)"],
+    [1, "rgba(255, 180, 0, 0.08)"],
+  ],
+  particleGlow: "#FFE066",
+  particleFill: "#FFC400",
+  meteorTailFade: "rgba(255, 202, 40, 0)",
+  meteorShadow: "#FFD700",
+};
 
 export const BONUS_SURVIVAL_INTERVAL = TARGET_FPS * 25; // 생존 N프레임마다 TIME BONUS (30초)
 export const BONUS_COUNTDOWN_SECONDS = 5; // 5,4,3,2,1 — 구슬 5 변환 구간(초)
@@ -51,6 +71,27 @@ export const BONUS_VOICE_FILE = "assets/audio/bonus-time.mp3"; // TIME BONUS 시
 export const BONUS_PITCH = 1.0; // TIME BONUS 효과음 playbackRate (1=원속, 높을수록 빠름)
 export const BONUS_VOICE_GAIN = 0.9; // TIME BONUS 효과음 볼륨
 export const BONUS_BGM_BPM = 128; // TIME BONUS BGM 템포
+
+/** TIME BONUS 5 구슬 — fill·shadow·하이라이트 일괄 관리 */
+export const TIME_BONUS_BALL = {
+  fill: "#f472b6",
+  glow: "#fbcfe8",
+  shadowRgb: "251, 207, 232",
+  shadowBlur: 22,
+  shadowGlowMin: 0.42,
+  shadowGlowAmp: 0.18,
+  pulseSpeed: 0.12,
+  radiusScale: 1.03,
+  radiusPulseAmp: 0.025,
+  highlightStops: [
+    [0, "rgba(255, 255, 255, 0.52)"],
+    [0.45, "rgba(255, 255, 255, 0.1)"],
+    [0.82, "rgba(255, 255, 255, 0)"],
+    [1, "rgba(255, 255, 255, 0)"],
+  ],
+  particleGlow: "#fbcfe8",
+  particleFill: "#f472b6",
+};
 
 export const PENALTY_DURATION = TARGET_FPS / 3; // 10 초과 패널티
 export const STACK_OVER_LIMIT = TARGET_FPS * 3; // 위험선 초과 시 게임오버
@@ -69,23 +110,33 @@ export const ADD_BALL_COUNT = 2; // +구슬 1회 개수
 export const INITIAL_FIELD_BALLS = 20; // initField 시작 구슬 수
 export const MATCH_SPAWN_COUNT = 2; // 10 맞춤 시 낙하 구슬 수
 export const ADD_BALL_STAGGER = TARGET_FPS / 10; // +구슬 낙하 간격(프레임)
-export const ADD_BALL_BLOCK_MARGIN = BALL_RADIUS * 2 * ADD_BALL_COUNT; // 위험선 직전 차단 여유(px)
+
+export const SHUFFLE_MIN_FRAMES = TARGET_FPS; // 셔플 후 최소 잠금(프레임)
+export const SHUFFLE_SETTLE_FRAMES = 15; // 연속 N프레임 정지 후 잠금 해제
 
 export const HINT_DURATION = TARGET_FPS * 4; // 힌트 강조 유지(프레임)
 export const HINT_COOLDOWN = TARGET_FPS * 3; // 힌트 재사용 대기(프레임)
 export const HINT_IDLE_TIME = TARGET_FPS * 5; // 자동 힌트까지 대기(프레임)
 
-export const COLOR_MAP = {
-  // 숫자별 구슬 — hue 골고루 퍼진 캔디 팔레트 (핑크→보라→파랑→초록→노랑→주황→틸→자홍→레드)
-  1: "#FF6B9D", // 핑크
-  2: "#9775FA", // 바이올렛
-  3: "#228BE6", // 블루
-  4: "#40C057", // 그린
-  5: "#FAB005", // 골드
-  6: "#FD7E14", // 오렌지
-  7: "#15AABF", // 틸
-  8: "#E649ED", // 푸시아
-  9: "#FA5252", // 체리
+/** 일반 구슬(1~9) — fill 색·캔디 하이라이트 radial */
+export const BALL_COLOR = {
+  map: {
+    1: "#FFB2CE",
+    2: "#9B88F5",
+    3: "#80C4FF",
+    4: "#88E89A",
+    5: "#FFD060",
+    6: "#FFBA85",
+    7: "#68E4D9",
+    8: "#D980FF",
+    9: "#FF7A8C",
+  },
+  highlightStops: [
+    [0, "rgba(255, 255, 255, 0.38)"],
+    [0.42, "rgba(255, 255, 255, 0.06)"],
+    [0.78, "rgba(255, 255, 255, 0)"],
+    [1, "rgba(0, 0, 0, 0.1)"],
+  ],
 };
 
 export const BASS_PATTERN = [

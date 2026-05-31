@@ -9,7 +9,7 @@ import {
   FRICTION,
   RESTITUTION,
   DEADLINE_Y,
-  COLOR_MAP,
+  BALL_COLOR,
   INITIAL_TIME,
   MAX_TIME,
   TARGET_FPS,
@@ -30,8 +30,7 @@ import {
   FEVER_GOLDEN_SCORE,
   FEVER_SPAWN_INTERVAL,
   FEVER_METEOR_SPAWN_INTERVAL,
-  GOLDEN_TEN_COLOR,
-  GOLDEN_TEN_GLOW,
+  GOLDEN_TEN_BALL,
   BONUS_SURVIVAL_INTERVAL,
   BONUS_COUNTDOWN_SECONDS,
   BONUS_PITCH,
@@ -45,11 +44,51 @@ import {
   ADD_BALL_COUNT,
   MATCH_SPAWN_COUNT,
   ADD_BALL_STAGGER,
-  ADD_BALL_BLOCK_MARGIN,
+  SHUFFLE_MIN_FRAMES,
+  SHUFFLE_SETTLE_FRAMES,
   HINT_DURATION,
   HINT_COOLDOWN,
   HINT_IDLE_TIME,
+  TIME_BONUS_BALL,
 } from "./config.js";
+
+/** @param {CanvasGradient} grad @param {[number, string][]} stops */
+function applyGradientStops(grad, stops) {
+  for (const [pos, color] of stops) {
+    grad.addColorStop(pos, color);
+  }
+}
+
+/**
+ * @param {typeof GOLDEN_TEN_BALL | typeof TIME_BONUS_BALL} style
+ * @param {number} pulsePhase
+ */
+function paintSpecialBallBody(style, x, y, baseRadius, pulsePhase) {
+  const glow =
+    style.shadowGlowMin + Math.sin(pulsePhase) * style.shadowGlowAmp;
+  const visualRadius =
+    baseRadius *
+    (style.radiusScale + Math.sin(pulsePhase) * style.radiusPulseAmp);
+
+  ctx.shadowBlur = style.shadowBlur;
+  ctx.shadowColor = `rgba(${style.shadowRgb}, ${glow})`;
+
+  if ("fillTop" in style) {
+    const bodyGrad = ctx.createLinearGradient(
+      x,
+      y - visualRadius,
+      x,
+      y + visualRadius,
+    );
+    bodyGrad.addColorStop(0, style.fillTop);
+    bodyGrad.addColorStop(1, style.fillBottom);
+    ctx.fillStyle = bodyGrad;
+  } else {
+    ctx.fillStyle = style.fill;
+  }
+
+  return visualRadius;
+}
 
 function bindAppHeight() {
   const update = () => {
@@ -211,7 +250,6 @@ let stackOverTime = 0;
 let hintCooldown = 0;
 let idleSinceMatch = 0;
 let hintedBalls = [];
-let pendingAddSpawns = 0;
 let feverActive = false;
 /** @type {'play'|null} */
 let feverPhase = null;
@@ -229,6 +267,9 @@ let lastTimeBonusTier = 0;
 let pendingTimeBonus = false;
 let dangerZoneEnterCount = 0;
 let wasInDangerTime = false;
+let shuffleSettling = false;
+let shuffleMinTimer = 0;
+let shuffleSettledFrames = 0;
 
 const bgm = createChain10Bgm(audio, {
   getGameActive: () => gameActive && !gamePaused,
@@ -328,7 +369,7 @@ class MeteorStreak {
     this.width = 1.5 + Math.random() * 3;
     this.alpha = 0.75 + Math.random() * 0.25;
     this.decay = 0.003 + Math.random() * 0.004;
-    this.color = Math.random() > 0.25 ? GOLDEN_TEN_GLOW : "#FFFFFF";
+    this.color = Math.random() > 0.25 ? GOLDEN_TEN_BALL.particleGlow : "#FFFFFF";
   }
 
   update() {
@@ -346,14 +387,14 @@ class MeteorStreak {
     const tailX = this.x - this.vx * 7;
     const tailY = this.y - this.vy * 3.5;
     const grad = ctx.createLinearGradient(tailX, tailY, this.x, this.y);
-    grad.addColorStop(0, "rgba(255, 215, 0, 0)");
+    grad.addColorStop(0, GOLDEN_TEN_BALL.meteorTailFade);
     grad.addColorStop(0.45, this.color);
     grad.addColorStop(1, "#FFFFFF");
 
     ctx.strokeStyle = grad;
     ctx.lineWidth = this.width;
     ctx.shadowBlur = 14;
-    ctx.shadowColor = "#FFD700";
+    ctx.shadowColor = GOLDEN_TEN_BALL.meteorShadow;
     ctx.beginPath();
     ctx.moveTo(tailX, tailY);
     ctx.lineTo(this.x, this.y);
@@ -361,7 +402,7 @@ class MeteorStreak {
 
     ctx.fillStyle = "#FFFFFF";
     ctx.shadowBlur = 20;
-    ctx.shadowColor = GOLDEN_TEN_COLOR;
+    ctx.shadowColor = GOLDEN_TEN_BALL.particleFill;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.width + 1.2, 0, Math.PI * 2);
     ctx.fill();
@@ -407,11 +448,10 @@ class Ball {
     this.vy = -Math.random() * 1.5;
     this.radius = BALL_RADIUS;
     this.number = number;
-    this.color = COLOR_MAP[number];
+    this.color = BALL_COLOR.map[number];
     this.selected = false;
     this.pulseTimer = 0;
     this.hintGlowTimer = 0;
-    this.droppingFromAdd = false;
     this.isGoldenTen = false;
     this.isTimeBonusFive = false;
     this.timeBonusOriginalNumber = null;
@@ -451,19 +491,23 @@ class Ball {
     let visualRadius = this.radius;
 
     if (this.isGoldenTen) {
-      this.goldenPulse += 0.14;
-      const glow = 0.55 + Math.sin(this.goldenPulse) * 0.2;
-      visualRadius *= 1.05 + Math.sin(this.goldenPulse) * 0.04;
-      ctx.shadowBlur = 24;
-      ctx.shadowColor = `rgba(255, 215, 0, ${glow})`;
-      ctx.fillStyle = GOLDEN_TEN_COLOR;
+      this.goldenPulse += GOLDEN_TEN_BALL.pulseSpeed;
+      visualRadius = paintSpecialBallBody(
+        GOLDEN_TEN_BALL,
+        this.x,
+        this.y,
+        this.radius,
+        this.goldenPulse,
+      );
     } else if (this.isTimeBonusFive) {
-      this.goldenPulse += 0.12;
-      const glow = 0.45 + Math.sin(this.goldenPulse) * 0.18;
-      visualRadius *= 1.04 + Math.sin(this.goldenPulse) * 0.03;
-      ctx.shadowBlur = 20;
-      ctx.shadowColor = `rgba(167, 139, 250, ${glow})`;
-      ctx.fillStyle = COLOR_MAP[5];
+      this.goldenPulse += TIME_BONUS_BALL.pulseSpeed;
+      visualRadius = paintSpecialBallBody(
+        TIME_BONUS_BALL,
+        this.x,
+        this.y,
+        this.radius,
+        this.goldenPulse,
+      );
     } else if (this.selected) {
       this.pulseTimer += 0.25;
       const scaleFactor = 1.12 + Math.sin(this.pulseTimer) * 0.05;
@@ -489,14 +533,15 @@ class Ball {
       this.y,
       visualRadius,
     );
-    if (this.isGoldenTen || this.isTimeBonusFive || this.selected) {
+    if (this.isGoldenTen) {
+      applyGradientStops(grad, GOLDEN_TEN_BALL.highlightStops);
+    } else if (this.selected) {
       grad.addColorStop(0, "rgba(255, 255, 255, 0.45)");
       grad.addColorStop(1, "rgba(0, 0, 0, 0.22)");
+    } else if (this.isTimeBonusFive) {
+      applyGradientStops(grad, TIME_BONUS_BALL.highlightStops);
     } else {
-      grad.addColorStop(0, "rgba(255, 255, 255, 0.38)");
-      grad.addColorStop(0.42, "rgba(255, 255, 255, 0.06)");
-      grad.addColorStop(0.78, "rgba(255, 255, 255, 0)");
-      grad.addColorStop(1, "rgba(0, 0, 0, 0.1)");
+      applyGradientStops(grad, BALL_COLOR.highlightStops);
     }
     ctx.fillStyle = grad;
     ctx.beginPath();
@@ -537,20 +582,6 @@ class Ball {
       ctx.strokeText(label, this.x, this.y + 1);
       ctx.fillText(label, this.x, this.y + 1);
     }
-
-    if (this.isGoldenTen) {
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.55)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, visualRadius + 2, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (this.isTimeBonusFive) {
-      ctx.strokeStyle = "rgba(196, 181, 253, 0.65)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, visualRadius + 2, 0, Math.PI * 2);
-      ctx.stroke();
-    }
   }
 }
 
@@ -590,7 +621,7 @@ function resolveCollisions() {
 }
 
 // 특정 좌표 혹은 무작위 낙하선상에 구슬 생성
-function spawnBall(customX = null, customY = null, { fromAdd = false } = {}) {
+function spawnBall(customX = null, customY = null) {
   const displayWidth = getDisplaySize().width;
   const margin = BALL_RADIUS * 2;
   const x =
@@ -600,14 +631,10 @@ function spawnBall(customX = null, customY = null, { fromAdd = false } = {}) {
   const y = customY !== null ? customY : -BALL_RADIUS * 2;
   const number = Math.floor(Math.random() * 9) + 1;
   const ball = new Ball(x, y, number);
-  ball.droppingFromAdd = fromAdd;
   if (timeBonusActive) {
     convertBallToTimeBonusFive(ball);
   }
   balls.push(ball);
-  if (fromAdd) {
-    pendingAddSpawns = Math.max(0, pendingAddSpawns - 1);
-  }
 }
 
 // 그리드형 예쁜 정렬 초기 셋업
@@ -620,7 +647,9 @@ function initField() {
   clearHint();
   hintCooldown = 0;
   idleSinceMatch = 0;
-  pendingAddSpawns = 0;
+  shuffleSettling = false;
+  shuffleMinTimer = 0;
+  shuffleSettledFrames = 0;
 
   const displayWidth = getDisplaySize().width;
   const displayHeight = getDisplaySize().height;
@@ -689,60 +718,89 @@ function updateHintButtonState() {
     balls.length < 2;
 }
 
-function isAddBallDropping() {
-  if (pendingAddSpawns > 0) return true;
-  return balls.some((b) => b.droppingFromAdd);
+function isBallFallingFromAbove(b) {
+  const top = b.y - b.radius;
+  return top < DEADLINE_Y && b.vy > STACK_SETTLED_VELOCITY;
 }
 
-function hasAddBallLanded(b) {
-  const { height } = getDisplaySize();
-  const onFloor = b.y + b.radius >= height - STACK_SETTLED_VELOCITY;
-  const onPile =
-    b.y > DEADLINE_Y + BALL_RADIUS &&
-    Math.abs(b.vy) < STACK_SETTLED_VELOCITY &&
-    Math.abs(b.vx) < STACK_SETTLED_VELOCITY;
-  return onFloor || onPile;
-}
-
-function releaseAddBallDrops() {
-  for (const b of balls) {
-    if (b.droppingFromAdd && hasAddBallLanded(b)) {
-      b.droppingFromAdd = false;
-    }
-  }
-}
-
-// 쌓인 더미 최상단 (낙하 중인 구슬·화면 밖 구슬 제외)
 function getPileHeadTop() {
   let headTop = Infinity;
   for (const b of balls) {
     if (b.y + b.radius <= 0) continue;
-    const top = b.y - b.radius;
-    if (top < DEADLINE_Y && b.vy > STACK_SETTLED_VELOCITY) continue;
-    headTop = Math.min(headTop, top);
+    if (isBallFallingFromAbove(b)) continue;
+    headTop = Math.min(headTop, b.y - b.radius);
   }
   return headTop;
 }
 
-function isPileNearLimit() {
+function isAddBallBlockedByStack() {
   if (stackOverTime > 0) return true;
 
   const headTop = getPileHeadTop();
-  if (!Number.isFinite(headTop)) return false;
-
-  return headTop <= DEADLINE_Y + ADD_BALL_BLOCK_MARGIN;
+  return Number.isFinite(headTop) && headTop <= DEADLINE_Y;
 }
 
-function isStackTooFullForAddBall() {
-  return isAddBallDropping() || isPileNearLimit();
+function areAllBallsSettled() {
+  if (balls.length === 0) return true;
+  return balls.every(
+    (b) =>
+      Math.abs(b.vy) < STACK_SETTLED_VELOCITY &&
+      Math.abs(b.vx) < STACK_SETTLED_VELOCITY,
+  );
+}
+
+function beginShuffleSettling() {
+  shuffleSettling = true;
+  shuffleMinTimer = SHUFFLE_MIN_FRAMES;
+  shuffleSettledFrames = 0;
+}
+
+function tickShuffleSettling() {
+  if (!shuffleSettling) return;
+
+  if (shuffleMinTimer > 0) shuffleMinTimer--;
+
+  if (areAllBallsSettled()) {
+    shuffleSettledFrames++;
+  } else {
+    shuffleSettledFrames = 0;
+  }
+
+  if (shuffleMinTimer === 0 && shuffleSettledFrames >= SHUFFLE_SETTLE_FRAMES) {
+    shuffleSettling = false;
+    shuffleMinTimer = 0;
+    shuffleSettledFrames = 0;
+  }
+}
+
+function updateShuffleButtonState() {
+  const shuffleBtn = document.getElementById("btn-shuffle");
+  if (!shuffleBtn) return;
+
+  const dockBlocked =
+    feverActive ||
+    timeBonusActive ||
+    !gameActive ||
+    gamePaused ||
+    gameEndingState ||
+    penaltyTime > 0;
+  const blocked = dockBlocked || shuffleSettling;
+
+  shuffleBtn.disabled = blocked;
+  if (shuffleSettling) {
+    shuffleBtn.title = "Shuffling…";
+  } else if (dockBlocked) {
+    shuffleBtn.title = "Shuffle marbles (unavailable)";
+  } else {
+    shuffleBtn.title = "Shuffle marbles";
+  }
 }
 
 function updateAddBallButtonState() {
   const btn = document.getElementById("btn-add-ball");
   if (!btn) return;
 
-  const dropping = isAddBallDropping();
-  const stackFull = isPileNearLimit();
+  const stackOver = isAddBallBlockedByStack();
   const blocked =
     !gameActive ||
     gamePaused ||
@@ -750,14 +808,13 @@ function updateAddBallButtonState() {
     feverActive ||
     timeBonusActive ||
     penaltyTime > 0 ||
-    dropping ||
-    stackFull;
+    stackOver;
 
   btn.disabled = blocked;
-  if (dropping) {
-    btn.title = "Marbles are dropping…";
-  } else if (stackFull) {
-    btn.title = "Too many marbles stacked";
+  if (stackOver) {
+    btn.title = "Pile reached the limit line!";
+  } else if (blocked) {
+    btn.title = "Add marbles (unavailable)";
   } else {
     btn.title = "Add marbles";
   }
@@ -766,8 +823,8 @@ function updateAddBallButtonState() {
 function updatePlayDockButtons() {
   updateHintButtonState();
   updateAddBallButtonState();
+  updateShuffleButtonState();
 
-  const shuffleBtn = document.getElementById("btn-shuffle");
   const pauseBtn = document.getElementById("btn-pause");
   const dockBlocked =
     feverActive ||
@@ -776,7 +833,6 @@ function updatePlayDockButtons() {
     gamePaused ||
     gameEndingState ||
     penaltyTime > 0;
-  if (shuffleBtn) shuffleBtn.disabled = dockBlocked;
   if (pauseBtn) pauseBtn.disabled = dockBlocked;
 }
 
@@ -1064,7 +1120,7 @@ function resetFeverState() {
 function convertBallToGoldenTen(ball) {
   ball.number = 10;
   ball.isGoldenTen = true;
-  ball.color = GOLDEN_TEN_COLOR;
+  ball.color = GOLDEN_TEN_BALL.fillBottom;
   ball.selected = false;
   ball.hintGlowTimer = 0;
 }
@@ -1139,7 +1195,6 @@ function startPerfectTenFever(comboLevel) {
   feverTimer = TARGET_FPS;
   feverTier = Math.max(1, Math.floor(comboLevel / FEVER_COMBO_INTERVAL));
   feverSpawnCooldown = 0;
-  pendingAddSpawns = 0;
   selectedBalls = [];
   clearHint();
 
@@ -1167,7 +1222,7 @@ function startPerfectTenFever(comboLevel) {
       new PopParticle(
         Math.random() * displayWidth,
         Math.random() * displayHeight * 0.5,
-        GOLDEN_TEN_GLOW,
+        GOLDEN_TEN_BALL.particleGlow,
         true,
       ),
     );
@@ -1189,7 +1244,7 @@ function endPerfectTenFever() {
     if (!ball.isGoldenTen) return;
     ball.isGoldenTen = false;
     ball.number = Math.floor(Math.random() * 9) + 1;
-    ball.color = COLOR_MAP[ball.number];
+    ball.color = BALL_COLOR.map[ball.number];
   });
 
   resetFeverState();
@@ -1223,7 +1278,7 @@ function convertBallToTimeBonusFive(ball) {
   }
   ball.isTimeBonusFive = true;
   ball.number = 5;
-  ball.color = COLOR_MAP[5];
+  ball.color = TIME_BONUS_BALL.fill;
   ball.selected = false;
   ball.hintGlowTimer = 0;
 }
@@ -1239,7 +1294,7 @@ function restoreTimeBonusBalls() {
     ball.number =
       ball.timeBonusOriginalNumber ?? Math.floor(Math.random() * 9) + 1;
     ball.timeBonusOriginalNumber = null;
-    ball.color = COLOR_MAP[ball.number];
+    ball.color = BALL_COLOR.map[ball.number];
   });
 }
 
@@ -1297,7 +1352,6 @@ function startTimeBonus() {
   timeBonusActive = true;
   timeBonusCountdownStep = BONUS_COUNTDOWN_SECONDS;
   timeBonusTimer = TARGET_FPS;
-  pendingAddSpawns = 0;
   selectedBalls = [];
   clearHint();
 
@@ -1319,7 +1373,7 @@ function startTimeBonus() {
       new PopParticle(
         Math.random() * displayWidth,
         Math.random() * displayHeight * 0.55,
-        i % 2 === 0 ? "#A78BFA" : COLOR_MAP[5],
+        i % 2 === 0 ? TIME_BONUS_BALL.particleGlow : TIME_BONUS_BALL.particleFill,
         true,
       ),
     );
@@ -1352,11 +1406,11 @@ function popGoldenTen(ball, index) {
   document.getElementById("score").innerText = score;
 
   for (let p = 0; p < 18; p++) {
-    particles.push(new PopParticle(ball.x, ball.y, GOLDEN_TEN_GLOW, p % 3 === 0));
+    particles.push(new PopParticle(ball.x, ball.y, GOLDEN_TEN_BALL.particleGlow, p % 3 === 0));
   }
   spawnMeteorStreaks(2);
   floatingTexts.push(
-    new FloatingText(ball.x, ball.y - 10, `+${points}`, "#FFD700"),
+    new FloatingText(ball.x, ball.y - 10, `+${points}`, GOLDEN_TEN_BALL.particleFill),
   );
 
   playSfx("tap");
@@ -1674,8 +1728,8 @@ function loop(timestamp) {
 
   ctx.strokeStyle =
     stackOverTime > 0
-      ? `rgba(239, 68, 68, ${0.45 + Math.sin(timestamp / 100) * 0.35})`
-      : "rgba(255, 255, 255, 0.12)";
+      ? `rgba(239, 68, 68, ${0.55 + Math.sin(timestamp / 100) * 0.35})`
+      : "rgba(190, 24, 93, 0.28)";
   ctx.lineWidth = 3;
   ctx.setLineDash([8, 6]);
   ctx.beginPath();
@@ -1693,12 +1747,12 @@ function loop(timestamp) {
 
   if (feverActive) {
     ctx.save();
-    ctx.fillStyle = "rgba(255, 215, 0, 0.06)";
+    ctx.fillStyle = "rgba(255, 235, 59, 0.035)";
     ctx.fillRect(0, 0, displayWidth, displayHeight);
     ctx.restore();
   } else if (timeBonusActive) {
     ctx.save();
-    ctx.fillStyle = "rgba(167, 139, 250, 0.08)";
+    ctx.fillStyle = "rgba(244, 114, 182, 0.04)";
     ctx.fillRect(0, 0, displayWidth, displayHeight);
     ctx.restore();
   }
@@ -1712,11 +1766,11 @@ function loop(timestamp) {
   // 3. 구슬 상태 업데이트 및 전사 드로잉
   balls.forEach((b) => b.update());
   resolveCollisions();
-  releaseAddBallDrops();
   balls.forEach((b) => {
     if (b.hintGlowTimer > 0) b.hintGlowTimer--;
   });
   balls.forEach((b) => b.draw());
+
 
   // 5. 부서지는 스파크 파티클 갱신
   particles.forEach((p, idx) => {
@@ -1747,6 +1801,7 @@ function loop(timestamp) {
       showHint(true);
     }
   }
+  tickShuffleSettling();
   updatePlayDockButtons();
 
   // 8. 콤보 무효화 기한 차감
@@ -1827,7 +1882,6 @@ function startGame() {
   maxComboLevel = 0;
   hintCooldown = 0;
   idleSinceMatch = 0;
-  pendingAddSpawns = 0;
   dangerZoneEnterCount = 0;
   wasInDangerTime = false;
   lastTimeBonusTier = 0;
@@ -1885,7 +1939,7 @@ function endGame(reason) {
   let fadeAlpha = 0;
   const deathLoop = () => {
     ctx.save();
-    ctx.fillStyle = `rgba(8, 8, 10, ${fadeAlpha})`;
+    ctx.fillStyle = `rgba(255, 228, 244, ${fadeAlpha})`;
     ctx.fillRect(0, 0, displayWidth, displayHeight);
     ctx.restore();
 
@@ -1907,7 +1961,9 @@ function addBallFromTop() {
     gamePaused ||
     gameEndingState ||
     penaltyTime > 0 ||
-    isStackTooFullForAddBall()
+    feverActive ||
+    timeBonusActive ||
+    isAddBallBlockedByStack()
   ) {
     return;
   }
@@ -1916,19 +1972,13 @@ function addBallFromTop() {
   const staggerMs =
     ADD_BALL_STAGGER > 0 ? (ADD_BALL_STAGGER / TARGET_FPS) * 1000 : 0;
 
-  pendingAddSpawns += count;
-  updatePlayDockButtons();
-
   for (let i = 0; i < count; i++) {
     if (staggerMs === 0) {
-      spawnBall(null, null, { fromAdd: true });
+      spawnBall();
     } else {
       setTimeout(() => {
         if (gameActive && !gamePaused) {
-          spawnBall(null, null, { fromAdd: true });
-        } else {
-          pendingAddSpawns = Math.max(0, pendingAddSpawns - 1);
-          updatePlayDockButtons();
+          spawnBall();
         }
       }, i * staggerMs);
     }
@@ -1942,11 +1992,23 @@ function addBallFromTop() {
 
 // 수동 셔플
 function shuffleBalls() {
-  if (!gameActive || gamePaused) return;
+  if (
+    !gameActive ||
+    gamePaused ||
+    gameEndingState ||
+    penaltyTime > 0 ||
+    feverActive ||
+    timeBonusActive ||
+    shuffleSettling
+  ) {
+    return;
+  }
+
+  beginShuffleSettling();
+  updatePlayDockButtons();
   playSfx("fail");
   clearHint();
   idleSinceMatch = 0;
-  pendingAddSpawns = 0;
   balls.forEach((b) => {
     b.vx = (Math.random() - 0.5) * 16;
     b.vy = -8 - Math.random() * 8;
