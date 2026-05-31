@@ -8,6 +8,7 @@ import { updateBestRecord, loadBestRecord } from "./scores.js";
 import { appendPlayRun, formatSurvivalTime, renderPlayHistory } from "./history.js";
 import { clearAllGameStorage } from "./storage.js";
 import { initI18n, onLocaleChange, t, syncMuteTooltip } from "./i18n/index.js";
+import { initSeo } from "./seo.js";
 import {
   TARGET_FPS,
   PHYSICS,
@@ -166,13 +167,16 @@ function closeResetModal() {
   resetModal?.classList.add("hidden");
 }
 
-const RESULT_VALUE_IDS = [
+const RESULT_THIS_RUN_VALUE_IDS = [
   "final-score",
   "final-max-combo",
   "final-time",
-  "final-best-score",
-  "final-best-combo",
-  "final-best-time",
+];
+
+const RESULT_THIS_RUN_BADGE_IDS = [
+  "final-score-badge",
+  "final-max-combo-badge",
+  "final-time-badge",
 ];
 
 /** @param {boolean} isNew */
@@ -180,8 +184,14 @@ function setResultValueNewRecord(id, isNew) {
   document.getElementById(id)?.classList.toggle("result-card__value--new-record", isNew);
 }
 
+/** @param {boolean} isNew */
+function setResultNewRecordBadge(id, isNew) {
+  document.getElementById(id)?.classList.toggle("hidden", !isNew);
+}
+
 function clearResultValueHighlights() {
-  RESULT_VALUE_IDS.forEach((id) => setResultValueNewRecord(id, false));
+  RESULT_THIS_RUN_VALUE_IDS.forEach((id) => setResultValueNewRecord(id, false));
+  RESULT_THIS_RUN_BADGE_IDS.forEach((id) => setResultNewRecordBadge(id, false));
 }
 
 function refreshBestRecordDisplays() {
@@ -194,8 +204,6 @@ function refreshBestRecordDisplays() {
     best.survivalFrames,
   );
   clearResultValueHighlights();
-  const newRecordBadge = document.getElementById("result-new-record");
-  newRecordBadge?.classList.add("hidden");
 }
 
 function confirmResetStorage() {
@@ -270,7 +278,6 @@ let particles = [];
 let floatingTexts = [];
 
 let score = 0;
-let lastGameOverReasonKey = "timeOut";
 let timeLeft = TIMER.initial;
 let gameActive = false;
 let gamePaused = false;
@@ -1146,7 +1153,6 @@ function getComboLevel(streak) {
 }
 
 function showResultScreen(reasonKey) {
-  lastGameOverReasonKey = reasonKey;
   const {
     isNewBestScore,
     isNewBestCombo,
@@ -1168,9 +1174,6 @@ function showResultScreen(reasonKey) {
     reasonKey,
   });
 
-  document.getElementById("gameover-reason").innerText = t(
-    `gameover.${reasonKey}`,
-  );
   document.getElementById("final-score").innerText = score.toLocaleString();
   document.getElementById("final-max-combo").innerText =
     formatMaxComboDisplay(maxComboLevel);
@@ -1187,15 +1190,9 @@ function showResultScreen(reasonKey) {
   setResultValueNewRecord("final-score", isNewBestScore);
   setResultValueNewRecord("final-max-combo", isNewBestCombo);
   setResultValueNewRecord("final-time", isNewBestTime);
-  setResultValueNewRecord("final-best-score", isNewBestScore);
-  setResultValueNewRecord("final-best-combo", isNewBestCombo);
-  setResultValueNewRecord("final-best-time", isNewBestTime);
-
-  const newRecordBadge = document.getElementById("result-new-record");
-  newRecordBadge.classList.toggle(
-    "hidden",
-    !(isNewBestScore || isNewBestCombo || isNewBestTime),
-  );
+  setResultNewRecordBadge("final-score-badge", isNewBestScore);
+  setResultNewRecordBadge("final-max-combo-badge", isNewBestCombo);
+  setResultNewRecordBadge("final-time-badge", isNewBestTime);
 
   showScreen("result");
 }
@@ -2388,6 +2385,7 @@ audio.bindLifecycle({
   },
 });
 
+initSeo();
 initI18n();
 syncMuteTooltip(audio.isMuted());
 
@@ -2396,11 +2394,6 @@ onLocaleChange(() => {
   renderPlayHistory();
   updateShuffleButtonState();
   updateAddBallButtonState();
-  if (!screens.result.classList.contains("hidden")) {
-    document.getElementById("gameover-reason").innerText = t(
-      `gameover.${lastGameOverReasonKey}`,
-    );
-  }
   if (gameActive) {
     updateEquation();
     updateFeverEquation();

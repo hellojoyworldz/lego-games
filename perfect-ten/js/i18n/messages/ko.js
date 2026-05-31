@@ -2,6 +2,7 @@
 export default {
   meta: {
     title: "퍼펙트 텐",
+    description: "숫자 구슬을 탭해서 합이 10이 되게!",
   },
   toolbar: {
     gameActions: "게임 메뉴",

@@ -1514,12 +1514,6 @@ canvas,
   margin: 0 0 0.5rem;
   font-size: clamp(2.4rem, 10vw, 3.5rem);
 }
-.result-screen__reason {
-  margin: 0 0 1.5rem;
-  font-family: "Jua", sans-serif;
-  font-size: 0.95rem;
-  color: var(--pt-text-muted);
-}
 .result-card {
   width: 100%;
   padding: 1.15rem;
@@ -1551,7 +1545,38 @@ canvas,
 .result-card__row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
   margin-bottom: 0.5rem;
+}
+.result-card__label-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.result-card__badge {
+  display: inline-block;
+  padding: 0.12rem 0.38rem;
+  border-radius: 9999px;
+  font-family: "Jua", sans-serif;
+  font-size: 0.58rem;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.result-card__badge--score {
+  color: var(--pt-stat-record);
+  background: rgba(225, 29, 72, 0.12);
+}
+.result-card__badge--combo {
+  color: var(--pt-stat-record);
+  background: rgba(225, 29, 72, 0.12);
+}
+.result-card__badge--time {
+  color: var(--pt-stat-record);
+  background: rgba(225, 29, 72, 0.12);
 }
 .result-card__row:last-child {
   margin-bottom: 0;
@@ -1576,25 +1601,6 @@ canvas,
 }
 .result-card__value--new-record {
   color: var(--pt-stat-record);
-}
-.result-screen__new-record {
-  margin: 0 0 0.75rem;
-  font-family: "Jua", sans-serif;
-  font-size: 1.1rem;
-  letter-spacing: 0.04em;
-  color: #ea580c;
-  text-align: center;
-  animation: result-new-record-pulse 0.9s ease-in-out infinite alternate;
-}
-@keyframes result-new-record-pulse {
-  from {
-    transform: scale(1);
-    opacity: 0.85;
-  }
-  to {
-    transform: scale(1.04);
-    opacity: 1;
-  }
 }
 
 /* 하단 플레이 독 */

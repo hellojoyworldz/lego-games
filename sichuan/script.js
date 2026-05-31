@@ -1,549 +1,451 @@
-document.addEventListener("DOMContentLoaded", function () {
-  const ROWS = 8;
-  const COLS = 10;
-  const TIME_LIMIT = 90; // 1분 30초 시간제한
-  const TILE_TYPES = [
-    "🍎",
-    "🍌",
-    "🍒",
-    "🍇",
-    "🍊",
-    "🍋",
-    "🍉",
-    "🍓",
-    "🥝",
-    "🥭",
-    "🍍",
-    "🥥",
-    "🍑",
-    "🥑",
-    "🍐",
-    "🍈",
-    "🍏",
-    "🫐",
-  ];
-
-  let board = [];
-  let selectedTile = null;
-  let tilesLeft = 0;
-  let timer = 0;
-  let timerInterval = null;
-  let score = 0;
-  let lineElements = []; // 연결선 요소 저장 배열
-
-  const startScreen = document.getElementById("start-screen");
-  const gameScreen = document.getElementById("game-screen");
-  const endScreen = document.getElementById("end-screen");
-  const boardElement = document.getElementById("board");
-  const tilesLeftElement = document.getElementById("tiles-left");
-  const timerElement = document.getElementById("timer");
-  const messageElement = document.getElementById("message");
-  const finalScoreElement = document.getElementById("final-score");
-  const timeResultElement = document.getElementById("time-result");
-  const startButton = document.getElementById("start-button");
-  const playAgainButton = document.getElementById("play-again");
-
-  // 게임 초기화
-  function initGame() {
-    clearInterval(timerInterval);
-    timer = TIME_LIMIT; // 시간제한 설정
-    score = 0;
-    timerElement.textContent = timer;
-    board = [];
-    selectedTile = null;
-    boardElement.innerHTML = "";
-    messageElement.textContent = "";
-    lineElements = [];
-
-    // 보드 크기 설정 - 간격을 더 크게
-    boardElement.style.gridTemplateColumns = `repeat(${COLS}, 1fr)`;
-    boardElement.style.gap = "8px"; // 타일 사이 간격 증가
-
-    // 빈 보드 생성
-    for (let row = 0; row < ROWS; row++) {
-      board[row] = [];
-      for (let col = 0; col < COLS; col++) {
-        board[row][col] = null;
-      }
-    }
-
-    // 랜덤 레이아웃 생성
-    const layout = generateRandomLayout();
-
-    // 실제 타일 개수 계산
-    let tilePositions = [];
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        if (layout[row][col] === 1) {
-          tilePositions.push({ row, col });
-        }
-      }
-    }
-
-    // 타일 쌍 생성 (짝수개의 타일이 되도록 함)
-    const totalTiles = tilePositions.length;
-    const pairCount = Math.floor(totalTiles / 2);
-
-    const tiles = [];
-    for (let i = 0; i < pairCount; i++) {
-      const tileType = TILE_TYPES[i % TILE_TYPES.length];
-      tiles.push(tileType, tileType);
-    }
-
-    // 타일 섞기
-    for (let i = tiles.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
-    }
-
-    // 타일 위치 섞기
-    for (let i = tilePositions.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [tilePositions[i], tilePositions[j]] = [
-        tilePositions[j],
-        tilePositions[i],
-      ];
-    }
-
-    // DOM에 타일 생성 및 배치
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        const tile = document.createElement("div");
-
-        if (layout[row][col] === 1) {
-          // 타일을 배치할 위치
-          const position = tilePositions.pop();
-          if (position && tiles.length > 0) {
-            const tileType = tiles.pop();
-            tile.className = "tile";
-            tile.textContent = tileType;
-            tile.dataset.row = row;
-            tile.dataset.col = col;
-
-            // 클릭 이벤트 리스너 수정 - 이벤트 버블링 방지
-            tile.addEventListener("click", function (event) {
-              event.stopPropagation();
-              handleTileClick(row, col);
-            });
-
-            board[row][col] = { type: tileType, element: tile };
-            tilesLeft++;
-          } else {
-            // 위치는 타일 위치지만 타일이 부족한 경우 (짝이 안 맞는 경우)
-            tile.className = "tile empty";
-            board[row][col] = null;
-          }
-        } else {
-          // 빈 공간
-          tile.className = "tile empty";
-          board[row][col] = null;
-        }
-
-        boardElement.appendChild(tile);
-      }
-    }
-
-    tilesLeftElement.textContent = tilesLeft;
-
-    // 타이머 시작 (카운트다운)
-    timerInterval = setInterval(() => {
-      timer--;
-      timerElement.textContent = timer;
-
-      if (timer <= 10) {
-        timerElement.style.color = "red"; // 시간이 10초 이하면 빨간색으로 표시
-      } else {
-        timerElement.style.color = ""; // 기본 색상으로 복원
-      }
-
-      if (timer <= 0) {
-        clearInterval(timerInterval);
-        endGame(false); // 시간 초과로 게임 종료
-      }
-    }, 1000);
-
-    // 게임 화면 표시
-    startScreen.style.display = "none";
-    gameScreen.style.display = "block";
-    endScreen.style.display = "none";
-  }
-
-  // 랜덤 레이아웃 생성 함수
-  function generateRandomLayout() {
-    const layout = [];
-    const emptySpaceRate = 0.4; // 빈 공간 비율을 40%로 증가
-
-    for (let row = 0; row < ROWS; row++) {
-      layout[row] = [];
-      for (let col = 0; col < COLS; col++) {
-        // 가장자리에는 항상 빈 공간 생성
-        if (row === 0 || row === ROWS - 1 || col === 0 || col === COLS - 1) {
-          layout[row][col] = 0;
-        } else {
-          // 나머지는 랜덤하게 타일 또는 빈 공간 생성
-          layout[row][col] = Math.random() < emptySpaceRate ? 0 : 1;
-        }
-      }
-    }
-
-    // 타일 개수가 짝수가 되도록 조정
-    let tileCount = 0;
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        if (layout[row][col] === 1) {
-          tileCount++;
-        }
-      }
-    }
-
-    // 타일 개수가 홀수면, 마지막 행에 타일 추가 또는 제거
-    if (tileCount % 2 !== 0) {
-      for (let col = 0; col < COLS; col++) {
-        if (layout[ROWS - 1][col] === 0) {
-          layout[ROWS - 1][col] = 1;
-          break;
-        } else if (layout[ROWS - 1][col] === 1) {
-          layout[ROWS - 1][col] = 0;
-          break;
-        }
-      }
-    }
-
-    return layout;
-  }
-
-  // 타일 클릭 처리
-  function handleTileClick(row, col) {
-    const tile = board[row][col];
-
-    // 빈 공간이나 이미 매칭된 타일은 무시
-    if (
-      !tile ||
-      !tile.element ||
-      tile.element.classList.contains("matched") ||
-      tile.element.classList.contains("empty")
-    ) {
-      return;
-    }
-
-    // 첫 번째 타일 선택
-    if (!selectedTile) {
-      selectedTile = tile;
-      tile.element.classList.add("selected");
-      return;
-    }
-
-    // 같은 타일 선택
-    if (tile.element === selectedTile.element) {
-      selectedTile.element.classList.remove("selected");
-      selectedTile = null;
-      return;
-    }
-
-    // 타입이 다른 타일 선택
-    if (tile.type !== selectedTile.type) {
-      selectedTile.element.classList.remove("selected");
-      selectedTile = tile;
-      tile.element.classList.add("selected");
-      return;
-    }
-
-    // 연결 확인
-    const selectedRow = parseInt(selectedTile.element.dataset.row);
-    const selectedCol = parseInt(selectedTile.element.dataset.col);
-
-    // 연결 가능 여부 및 경로 찾기
-    const path = findPath(selectedRow, selectedCol, row, col);
-
-    if (path) {
-      // 연결선 그리기
-      drawConnectionLines(path);
-
-      // 0.5초 후에 타일 제거 및 점수 계산
-      setTimeout(() => {
-        // 연결선 제거
-        clearConnectionLines();
-
-        // 매칭 성공
-        selectedTile.element.classList.remove("selected");
-        selectedTile.element.classList.add("matched");
-        tile.element.classList.add("matched");
-
-        // 게임판에서 제거
-        board[selectedRow][selectedCol] = null;
-        board[row][col] = null;
-
-        selectedTile = null;
-        tilesLeft -= 2;
-        tilesLeftElement.textContent = tilesLeft;
-
-        // 점수 계산 (남은 시간이 많을수록 높은 점수)
-        const timeBonus = Math.max(timer, 0);
-        const matchPoints = 100;
-        const pointsEarned = matchPoints + timeBonus;
-        score += pointsEarned;
-
-        messageElement.textContent = `연결 성공! +${pointsEarned}점`;
-        setTimeout(() => {
-          messageElement.textContent = "";
-        }, 1000);
-
-        // 게임 클리어 확인
-        if (tilesLeft === 0) {
-          endGame(true); // 성공으로 게임 종료
-        }
-      }, 500);
-    } else {
-      // 연결할 수 없음
-      selectedTile.element.classList.remove("selected");
-      selectedTile = tile;
-      tile.element.classList.add("selected");
-
-      messageElement.textContent = "연결할 수 없습니다.";
-      setTimeout(() => {
-        messageElement.textContent = "";
-      }, 1000);
-    }
-  }
-
-  // 연결선 그리기
-  function drawConnectionLines(path) {
-    // 기존 연결선 제거
-    clearConnectionLines();
-
-    // 각 경로 지점을 연결하는 선 생성
-    for (let i = 0; i < path.length - 1; i++) {
-      const start = path[i];
-      const end = path[i + 1];
-
-      // 각 지점의 타일 요소 찾기
-      const startTile = document.querySelector(
-        `.tile[data-row="${start.row}"][data-col="${start.col}"]`
-      );
-      const endTile = document.querySelector(
-        `.tile[data-row="${end.row}"][data-col="${end.col}"]`
-      );
-
-      if (!startTile || !endTile) continue;
-
-      // 타일의 위치 정보
-      const startRect = startTile.getBoundingClientRect();
-      const endRect = endTile.getBoundingClientRect();
-      const boardRect = boardElement.getBoundingClientRect();
-
-      // 타일 중앙 위치 계산 (보드 기준)
-      const startX = startRect.left + startRect.width / 2 - boardRect.left;
-      const startY = startRect.top + startRect.height / 2 - boardRect.top;
-      const endX = endRect.left + endRect.width / 2 - boardRect.left;
-      const endY = endRect.top + endRect.height / 2 - boardRect.top;
-
-      // 선 생성
-      const line = document.createElement("div");
-      line.className = "connection-line";
-
-      // 선의 길이와 각도 계산
-      const length = Math.sqrt(
-        Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2)
-      );
-      const angle = (Math.atan2(endY - startY, endX - startX) * 180) / Math.PI;
-
-      // 선 스타일 설정
-      line.style.width = `${length}px`;
-      line.style.left = `${startX}px`;
-      line.style.top = `${startY}px`;
-      line.style.transform = `rotate(${angle}deg)`;
-      line.style.transformOrigin = "0 50%";
-
-      // 보드에 선 추가
-      boardElement.appendChild(line);
-      lineElements.push(line);
-    }
-  }
-
-  // 연결선 제거
-  function clearConnectionLines() {
-    lineElements.forEach((line) => {
-      if (line && line.parentNode) {
-        line.parentNode.removeChild(line);
-      }
-    });
-    lineElements = [];
-  }
-
-  // 게임 종료
-  function endGame(success = false) {
-    clearInterval(timerInterval);
-    clearConnectionLines();
-
-    let message = "";
-    let timeBonus = 0;
-
-    if (success) {
-      // 보너스 점수 - 남은 시간 보너스
-      timeBonus = Math.max(timer * 10, 0);
-      score += timeBonus;
-      message = "게임 클리어!";
-    } else {
-      message = "시간 초과!";
-    }
-
-    // 점수 표시
-    finalScoreElement.textContent = `점수: ${score}점`;
-
-    if (success) {
-      timeResultElement.textContent = `남은 시간: ${timer}초 (시간 보너스: +${timeBonus}점)`;
-    } else {
-      timeResultElement.textContent = `시간이 초과되었습니다!`;
-    }
-
-    // 타이틀 업데이트
-    document.querySelector("#end-screen .title").textContent = message;
-
-    // 종료 화면 표시
-    setTimeout(() => {
-      gameScreen.style.display = "none";
-      endScreen.style.display = "flex";
-    }, 1000);
-  }
-
-  // 연결 경로 찾기
-  function findPath(r1, c1, r2, c2) {
-    // 직접 연결 가능한 경우
-    if (isDirectlyConnectable(r1, c1, r2, c2)) {
-      return [
-        { row: r1, col: c1 },
-        { row: r2, col: c2 },
-      ];
-    }
-
-    // 한 번 꺾여서 연결 가능한 경우
-    for (let r = 0; r < ROWS; r++) {
-      if (isEmpty(r, c1) || (r === r2 && c1 === c2)) {
-        if (
-          isDirectlyConnectable(r1, c1, r, c1) &&
-          isDirectlyConnectable(r, c1, r2, c2)
-        ) {
-          return [
-            { row: r1, col: c1 },
-            { row: r, col: c1 },
-            { row: r2, col: c2 },
-          ];
-        }
-      }
-    }
-
-    for (let c = 0; c < COLS; c++) {
-      if (isEmpty(r1, c) || (r1 === r2 && c === c2)) {
-        if (
-          isDirectlyConnectable(r1, c1, r1, c) &&
-          isDirectlyConnectable(r1, c, r2, c2)
-        ) {
-          return [
-            { row: r1, col: c1 },
-            { row: r1, col: c },
-            { row: r2, col: c2 },
-          ];
-        }
-      }
-    }
-
-    // 두 번 꺾여서 연결 가능한 경우
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
-        if (
-          (isEmpty(r, c1) || (r === r2 && c1 === c2)) &&
-          (isEmpty(r, c) || (r === r2 && c === c2))
-        ) {
-          if (
-            isDirectlyConnectable(r1, c1, r, c1) &&
-            isDirectlyConnectable(r, c1, r, c) &&
-            isDirectlyConnectable(r, c, r2, c2)
-          ) {
-            return [
-              { row: r1, col: c1 },
-              { row: r, col: c1 },
-              { row: r, col: c },
-              { row: r2, col: c2 },
-            ];
-          }
-        }
-
-        if (
-          (isEmpty(r1, c) || (r1 === r2 && c === c2)) &&
-          (isEmpty(r, c) || (r === r2 && c === c2))
-        ) {
-          if (
-            isDirectlyConnectable(r1, c1, r1, c) &&
-            isDirectlyConnectable(r1, c, r, c) &&
-            isDirectlyConnectable(r, c, r2, c2)
-          ) {
-            return [
-              { row: r1, col: c1 },
-              { row: r1, col: c },
-              { row: r, col: c },
-              { row: r2, col: c2 },
-            ];
-          }
-        }
-      }
-    }
-
-    return null; // 연결 불가능
-  }
-
-  // 직선으로 연결 가능한지 확인
-  function isDirectlyConnectable(r1, c1, r2, c2) {
-    // 같은 타일이면 연결 불가
-    if (r1 === r2 && c1 === c2) {
-      return false;
-    }
-
-    // 같은 행
-    if (r1 === r2) {
-      const start = Math.min(c1, c2);
-      const end = Math.max(c1, c2);
-
-      for (let c = start + 1; c < end; c++) {
-        if (!isEmpty(r1, c)) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    // 같은 열
-    if (c1 === c2) {
-      const start = Math.min(r1, r2);
-      const end = Math.max(r1, r2);
-
-      for (let r = start + 1; r < end; r++) {
-        if (!isEmpty(r, c1)) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    return false;
-  }
-
-  // 빈 타일인지 확인
-  function isEmpty(row, col) {
-    // 보드 바깥이면 빈 것으로 간주
-    if (row < 0 || row >= ROWS || col < 0 || col >= COLS) {
-      return true;
-    }
-    return (
-      board[row][col] === null ||
-      (board[row][col] &&
-        board[row][col].element.classList.contains("matched")) ||
-      (board[row][col] && board[row][col].element.classList.contains("empty"))
-    );
-  }
-
-  // 시작 화면에서 게임 시작 버튼
-  startButton.addEventListener("click", initGame);
-
-  // 종료 화면에서 새 게임 버튼
-  playAgainButton.addEventListener("click", initGame);
+// PeerX Landing Page Interactive Features
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize all interactive features
+    initializeNavigation();
+    initializeSlidesTabs();
+    initializeScrollEffects();
+    initializeCTAButtons();
+    initializeMarketWidget();
 });
+
+// Navigation functionality
+function initializeNavigation() {
+    const navItems = document.querySelectorAll('.nav-item');
+    
+    navItems.forEach(item => {
+        item.addEventListener('click', function(e) {
+            // Remove active class from all nav items
+            navItems.forEach(nav => nav.classList.remove('active'));
+            
+            // Add active class to clicked item (only for main nav, not actions)
+            if (this.parentElement.classList.contains('nav-menu')) {
+                this.classList.add('active');
+            }
+            
+            // Smooth scroll to section if it's an anchor link
+            const href = this.getAttribute('href');
+            if (href && href.startsWith('#')) {
+                e.preventDefault();
+                const targetSection = document.querySelector(href);
+                if (targetSection) {
+                    targetSection.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            }
+        });
+    });
+
+    // Handle scroll to update active nav item
+    window.addEventListener('scroll', updateActiveNavItem);
+}
+
+// Update active navigation item based on scroll position
+function updateActiveNavItem() {
+    const sections = document.querySelectorAll('section[id]');
+    const navItems = document.querySelectorAll('.nav-menu .nav-item');
+    let currentSection = '';
+
+    sections.forEach(section => {
+        const sectionTop = section.offsetTop - 100;
+        const sectionHeight = section.offsetHeight;
+        
+        if (window.scrollY >= sectionTop && window.scrollY < sectionTop + sectionHeight) {
+            currentSection = section.getAttribute('id');
+        }
+    });
+
+    navItems.forEach(item => {
+        item.classList.remove('active');
+        const href = item.getAttribute('href');
+        if (href === `#${currentSection}`) {
+            item.classList.add('active');
+        }
+    });
+}
+
+// Slides tabs functionality
+function initializeSlidesTabs() {
+    const slideTabs = document.querySelectorAll('.slide-tab');
+    
+    slideTabs.forEach((tab, index) => {
+        tab.addEventListener('click', function() {
+            // Remove active class from all tabs
+            slideTabs.forEach(t => t.classList.remove('active'));
+            
+            // Add active class to clicked tab
+            this.classList.add('active');
+            
+            // Update slide content based on tab
+            updateSlideContent(index);
+        });
+    });
+}
+
+// Update slide content
+function updateSlideContent(tabIndex) {
+    const slideContent = document.querySelector('.slide-content');
+    const slideImage = slideContent.querySelector('.slide-image');
+    
+    // Different content for each tab
+    const slideData = [
+        {
+            image: 'https://api.builder.io/api/v1/image/assets/TEMP/244eea225354784be8cd368c593b09d4c3f438f2?width=1910',
+            alt: 'Global P2P Trading'
+        },
+        {
+            image: 'https://api.builder.io/api/v1/image/assets/TEMP/244eea225354784be8cd368c593b09d4c3f438f2?width=1910',
+            alt: 'Multi-Network Wallet'
+        },
+        {
+            image: 'https://api.builder.io/api/v1/image/assets/TEMP/244eea225354784be8cd368c593b09d4c3f438f2?width=1910',
+            alt: 'Fee-Free Direct Trading'
+        }
+    ];
+    
+    // Fade out effect
+    slideImage.style.opacity = '0';
+    
+    setTimeout(() => {
+        slideImage.src = slideData[tabIndex].image;
+        slideImage.alt = slideData[tabIndex].alt;
+        slideImage.style.opacity = '1';
+    }, 300);
+}
+
+// Scroll effects and animations
+function initializeScrollEffects() {
+    // Create intersection observer for animations
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('animate-in');
+            }
+        });
+    }, observerOptions);
+
+    // Observe elements for animation
+    const animatedElements = document.querySelectorAll(
+        '.feature-card, .why-card, .testimonial-card, .hero-content'
+    );
+    
+    animatedElements.forEach(el => {
+        observer.observe(el);
+    });
+
+    // Parallax effect for hero background
+    window.addEventListener('scroll', () => {
+        const scrolled = window.pageYOffset;
+        const heroPattern = document.querySelector('.hero-pattern');
+        
+        if (heroPattern) {
+            const speed = scrolled * 0.3;
+            heroPattern.style.transform = `translateY(${speed}px)`;
+        }
+    });
+}
+
+// CTA buttons functionality
+function initializeCTAButtons() {
+    const ctaButtons = document.querySelectorAll('.cta-button');
+    
+    ctaButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            // Add click animation
+            this.style.transform = 'scale(0.95)';
+            
+            setTimeout(() => {
+                this.style.transform = '';
+            }, 150);
+            
+            // Handle different CTA actions
+            const buttonText = this.textContent.trim();
+            
+            switch(buttonText) {
+                case '지금 시작하기':
+                case 'Get Started with PeerX':
+                    handleGetStarted();
+                    break;
+                case '회원가입':
+                    handleSignUp();
+                    break;
+                case '이용 가이드':
+                    handleUserGuide();
+                    break;
+                default:
+                    console.log('CTA clicked:', buttonText);
+            }
+        });
+        
+        // Add hover sound effect (optional)
+        button.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-2px)';
+        });
+        
+        button.addEventListener('mouseleave', function() {
+            this.style.transform = '';
+        });
+    });
+}
+
+// Market widget functionality
+function initializeMarketWidget() {
+    const cryptoItems = document.querySelectorAll('.crypto-item');
+    
+    // Simulate real-time price updates
+    setInterval(() => {
+        updateCryptoPrices();
+    }, 5000); // Update every 5 seconds
+    
+    // Add hover effects to crypto items
+    cryptoItems.forEach(item => {
+        item.addEventListener('mouseenter', function() {
+            this.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+            this.style.borderRadius = '8px';
+            this.style.transition = 'all 0.3s ease';
+        });
+        
+        item.addEventListener('mouseleave', function() {
+            this.style.backgroundColor = 'transparent';
+        });
+    });
+}
+
+// Update crypto prices with random fluctuations
+function updateCryptoPrices() {
+    const priceElements = document.querySelectorAll('.price-value');
+    const changeElements = document.querySelectorAll('.price-change');
+    
+    priceElements.forEach((priceEl, index) => {
+        const currentPrice = parseFloat(priceEl.textContent);
+        const fluctuation = (Math.random() - 0.5) * 0.02; // ±1% change
+        const newPrice = currentPrice * (1 + fluctuation);
+        
+        // Animate price change
+        priceEl.style.transition = 'color 0.3s ease';
+        priceEl.style.color = fluctuation > 0 ? '#95CF37' : '#FF6B6B';
+        
+        setTimeout(() => {
+            priceEl.textContent = newPrice.toFixed(2);
+            priceEl.style.color = '#FFF';
+        }, 300);
+        
+        // Update percentage change
+        const changeEl = changeElements[index];
+        if (changeEl) {
+            const change = (fluctuation * 100).toFixed(3);
+            changeEl.textContent = `${change > 0 ? '+' : ''}${change}%`;
+            changeEl.style.color = change > 0 ? '#95CF37' : '#FF6B6B';
+        }
+    });
+}
+
+// CTA Handler Functions
+function handleGetStarted() {
+    // Smooth scroll to sign up section or open modal
+    const signUpSection = document.querySelector('.buy-crypto-section');
+    if (signUpSection) {
+        signUpSection.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
+    }
+    
+    // Show success message
+    showNotification('환영합니다! PeerX와 함께 거래를 시작하세요.', 'success');
+}
+
+function handleSignUp() {
+    // Simulate sign up process
+    showNotification('회원가입 페이지로 이동합니다...', 'info');
+    
+    // In a real app, this would redirect to sign up page
+    setTimeout(() => {
+        console.log('Redirecting to sign up page...');
+    }, 1000);
+}
+
+function handleUserGuide() {
+    // Show user guide modal or redirect
+    showNotification('이용 가이드를 확인하고 있습니다...', 'info');
+    
+    // In a real app, this would open a modal or redirect
+    setTimeout(() => {
+        console.log('Opening user guide...');
+    }, 1000);
+}
+
+// Notification system
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    
+    // Style the notification
+    Object.assign(notification.style, {
+        position: 'fixed',
+        top: '100px',
+        right: '20px',
+        background: type === 'success' ? '#95CF37' : type === 'error' ? '#FF6B6B' : '#795AFE',
+        color: '#FFF',
+        padding: '15px 20px',
+        borderRadius: '8px',
+        zIndex: '9999',
+        transform: 'translateX(100%)',
+        transition: 'transform 0.3s ease',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+        maxWidth: '300px',
+        fontSize: '14px',
+        fontWeight: '500'
+    });
+    
+    // Add to DOM
+    document.body.appendChild(notification);
+    
+    // Animate in
+    setTimeout(() => {
+        notification.style.transform = 'translateX(0)';
+    }, 100);
+    
+    // Remove after delay
+    setTimeout(() => {
+        notification.style.transform = 'translateX(100%)';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 3000);
+}
+
+// Smooth scrolling for anchor links
+document.addEventListener('click', function(e) {
+    const link = e.target.closest('a[href^="#"]');
+    if (link) {
+        e.preventDefault();
+        const targetId = link.getAttribute('href').substring(1);
+        const targetElement = document.getElementById(targetId);
+        
+        if (targetElement) {
+            targetElement.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }
+    }
+});
+
+// Keyboard navigation support
+document.addEventListener('keydown', function(e) {
+    // ESC key to close any open modals/overlays
+    if (e.key === 'Escape') {
+        const notifications = document.querySelectorAll('.notification');
+        notifications.forEach(notification => {
+            notification.style.transform = 'translateX(100%)';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        });
+    }
+});
+
+// Performance optimization: debounce scroll events
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Apply debouncing to scroll events
+window.addEventListener('scroll', debounce(updateActiveNavItem, 100));
+
+// Loading animation
+window.addEventListener('load', function() {
+    document.body.classList.add('loaded');
+    
+    // Trigger initial animations
+    const heroElements = document.querySelectorAll('.hero-content, .market-widget');
+    heroElements.forEach((el, index) => {
+        setTimeout(() => {
+            el.style.opacity = '1';
+            el.style.transform = 'translateY(0)';
+        }, index * 200);
+    });
+});
+
+// Add CSS for animations via JavaScript
+const style = document.createElement('style');
+style.textContent = `
+    .hero-content, .market-widget {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: all 0.8s ease;
+    }
+    
+    .notification {
+        font-family: 'Pretendard', 'Inter', sans-serif;
+    }
+    
+    .animate-in {
+        animation: fadeInUp 0.6s ease forwards;
+    }
+    
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .slide-image {
+        transition: opacity 0.3s ease;
+    }
+    
+    .crypto-item {
+        transition: all 0.3s ease;
+    }
+    
+    .crypto-item:hover {
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        border-radius: 8px;
+    }
+`;
+
+document.head.appendChild(style);
+
+// Console welcome message
+console.log(`
+    🚀 Welcome to PeerX!
+    
+    This is a modern P2P cryptocurrency trading platform.
+    Built with vanilla HTML, CSS, and JavaScript.
+    
+    Features:
+    - Responsive design
+    - Interactive navigation
+    - Real-time price simulation
+    - Smooth animations
+    - Accessibility support
+    
+    Ready to start trading? 💰
+`);

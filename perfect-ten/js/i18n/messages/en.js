@@ -2,6 +2,7 @@
 export default {
   meta: {
     title: "Perfect Ten",
+    description: "Tap numbers to make 10!",
   },
   toolbar: {
     gameActions: "Game actions",
@@ -18,8 +19,8 @@ export default {
     close: "Close",
   },
   intro: {
-    descLine1: "Tap number marbles",
-    descLine2: "and make 10!",
+    descLine1: "Tap numbers",
+    descLine2: "to Make 10!",
     start: "START GAME",
   },
   equation: {

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -7,6 +7,43 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <title>Perfect Ten</title>
+    <meta
+      name="description"
+      content="Tap numbers to make 10! A quick number puzzle game in your browser."
+    />
+    <meta name="application-name" content="Perfect Ten" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f472b6" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Perfect Ten" />
+    <meta property="og:title" content="Perfect Ten" />
+    <meta property="og:description" content="Tap numbers to make 10!" />
+    <meta property="og:url" content="" />
+    <meta property="og:image" content="assets/images/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="Perfect Ten — tap numbers to make 10" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="ko_KR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Perfect Ten" />
+    <meta name="twitter:description" content="Tap numbers to make 10!" />
+    <meta name="twitter:image" content="assets/images/og-image.png" />
+    <meta name="twitter:image:alt" content="Perfect Ten — tap numbers to make 10" />
+    <link rel="icon" type="image/png" href="assets/images/favicon.png" />
+    <link rel="apple-touch-icon" href="assets/images/favicon.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Perfect Ten",
+        "alternateName": "퍼펙트 텐",
+        "description": "Tap numbers to make 10!",
+        "applicationCategory": "GameApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "inLanguage": ["en", "ko"]
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -241,10 +278,10 @@
             </h1>
             <p class="intro-desc">
               <span class="intro-desc__line" data-i18n="intro.descLine1"
-                >Tap number marbles</span
+                >Tap numbers</span
               >
               <span class="intro-desc__line" data-i18n="intro.descLine2"
-                >and make 10!</span
+                >to Make 10!</span
               >
             </p>
           </div>
@@ -437,24 +474,23 @@
             <span class="intro-title__fill">OVER</span>
           </span>
         </h2>
-        <p id="gameover-reason" class="result-screen__reason">Time ran out.</p>
-        <p
-          id="result-new-record"
-          class="result-screen__new-record hidden"
-          aria-live="polite"
-          data-i18n="result.newRecord"
-        >
-          NEW RECORD!
-        </p>
         <div class="result-cards">
           <div class="result-card result-card--this-run">
             <p class="result-card__section-label" data-i18n="result.thisRun">
               This Run
             </p>
             <div class="result-card__row">
-              <span class="result-card__label" data-i18n="result.finalScore"
-                >Final Score</span
-              >
+              <span class="result-card__label-wrap">
+                <span class="result-card__label" data-i18n="result.finalScore"
+                  >Final Score</span
+                >
+                <span
+                  id="final-score-badge"
+                  class="result-card__badge result-card__badge--score hidden"
+                  data-i18n="result.newRecord"
+                  >NEW RECORD!</span
+                >
+              </span>
               <span
                 id="final-score"
                 class="result-card__value result-card__value--score"
@@ -462,9 +498,17 @@
               >
             </div>
             <div class="result-card__row">
-              <span class="result-card__label" data-i18n="result.maxCombo"
-                >Max Combo</span
-              >
+              <span class="result-card__label-wrap">
+                <span class="result-card__label" data-i18n="result.maxCombo"
+                  >Max Combo</span
+                >
+                <span
+                  id="final-max-combo-badge"
+                  class="result-card__badge result-card__badge--combo hidden"
+                  data-i18n="result.newRecord"
+                  >NEW RECORD!</span
+                >
+              </span>
               <span
                 id="final-max-combo"
                 class="result-card__value result-card__value--combo"
@@ -472,9 +516,17 @@
               >
             </div>
             <div class="result-card__row">
-              <span class="result-card__label" data-i18n="result.survivalTime"
-                >Survival Time</span
-              >
+              <span class="result-card__label-wrap">
+                <span class="result-card__label" data-i18n="result.survivalTime"
+                  >Survival Time</span
+                >
+                <span
+                  id="final-time-badge"
+                  class="result-card__badge result-card__badge--time hidden"
+                  data-i18n="result.newRecord"
+                  >NEW RECORD!</span
+                >
+              </span>
               <span
                 id="final-time"
                 class="result-card__value result-card__value--time"
