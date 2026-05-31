@@ -1,13 +1,8 @@
 import {
-  BASS_PATTERN,
-  FEVER_BASS_PATTERN,
-  BONUS_BASS_PATTERN,
-  FEVER_BGM_BPM,
-  FEVER_BGM_BPM_STEP,
-  BONUS_BGM_BPM,
-  MAX_TIME,
-  BGM_URGENT_TIME,
-  BGM_PANIC_TIME,
+  BGM,
+  FEVER,
+  TIME_BONUS,
+  TIMER,
 } from "./config.js";
 
 /**
@@ -41,7 +36,7 @@ export function createChain10Bgm(audio, state) {
 
     const timeRatio = Math.max(
       0,
-      Math.min(1, (MAX_TIME - state.getTimeLeft()) / MAX_TIME),
+      Math.min(1, (TIMER.max - state.getTimeLeft()) / TIMER.max),
     );
     filter.frequency.setValueAtTime(320 + timeRatio * 450, now);
     filter.Q.setValueAtTime(3.5, now);
@@ -325,14 +320,30 @@ export function createChain10Bgm(audio, state) {
     } catch (_e) {}
   }
 
+  function playNormalLowTimeTicks() {
+    const isOffbeat = currentStep % 2 !== 0;
+    const hatVol = 0.07;
+    playTickingHat(
+      isOffbeat ? 9000 : 7000,
+      0.04,
+      isOffbeat ? hatVol * 1.6 : hatVol,
+    );
+    if (currentStep % 8 === 0) {
+      playTritoneAlarm(0.09);
+    }
+    if (currentStep % 4 === 0) {
+      playSubKick(0.25);
+    }
+  }
+
   function getFeverBpm() {
     const tier = Math.max(1, state.getFeverTier?.() ?? 1);
-    return FEVER_BGM_BPM + (tier - 1) * FEVER_BGM_BPM_STEP;
+    return FEVER.bgm.bpm + (tier - 1) * FEVER.bgm.bpmStep;
   }
 
   function runFeverLoop(stepDuration) {
     const note =
-      FEVER_BASS_PATTERN[currentStep % FEVER_BASS_PATTERN.length];
+      FEVER.bgm.bassPattern[currentStep % FEVER.bgm.bassPattern.length];
     playFeverBass(note, stepDuration * 0.88, 0.2);
 
     playTickingHat(10000 + (currentStep % 3) * 900, 0.028, 0.09);
@@ -486,7 +497,7 @@ export function createChain10Bgm(audio, state) {
 
   function runBonusLoop(stepDuration) {
     const note =
-      BONUS_BASS_PATTERN[currentStep % BONUS_BASS_PATTERN.length];
+      TIME_BONUS.bgm.bassPattern[currentStep % TIME_BONUS.bgm.bassPattern.length];
     playBonusMelody(note, stepDuration * 0.92, 0.1);
 
     if (currentStep % 2 === 0) {
@@ -511,32 +522,33 @@ export function createChain10Bgm(audio, state) {
   }
 
   function runNormalLoop(stepDuration) {
-    const timeRatio = Math.max(
-      0,
-      Math.min(1, (MAX_TIME - state.getTimeLeft()) / MAX_TIME),
-    );
-
-    let note = BASS_PATTERN[currentStep % BASS_PATTERN.length];
-    if (state.getTimeLeft() < BGM_URGENT_TIME) {
+    let note = BGM.bassPattern[currentStep % BGM.bassPattern.length];
+    if (state.getTimeLeft() < TIMER.bgmUrgent) {
       note *= 0.75;
     }
 
     playDetunedBass(note, stepDuration * 0.95, 0.14);
 
     const isOffbeat = currentStep % 2 !== 0;
-    const hatVol = 0.02 + timeRatio * 0.05;
-    playTickingHat(
-      isOffbeat ? 9000 : 7000,
-      0.04,
-      isOffbeat ? hatVol * 1.6 : hatVol,
-    );
+    const inPanic = state.getTimeLeft() < TIMER.bgmPanic;
+    const inUrgent = state.getTimeLeft() < TIMER.bgmUrgent;
 
-    if (state.getTimeLeft() < BGM_URGENT_TIME && currentStep % 8 === 0) {
-      playTritoneAlarm(0.09);
-    }
-
-    if (state.getTimeLeft() < BGM_PANIC_TIME && currentStep % 4 === 0) {
-      playSubKick(0.25);
+    if (inPanic) {
+      playNormalLowTimeTicks();
+    } else {
+      const timeRatio = Math.max(
+        0,
+        Math.min(1, (TIMER.max - state.getTimeLeft()) / TIMER.max),
+      );
+      const hatVol = 0.02 + timeRatio * 0.05;
+      playTickingHat(
+        isOffbeat ? 9000 : 7000,
+        0.04,
+        isOffbeat ? hatVol * 1.6 : hatVol,
+      );
+      if (inUrgent && currentStep % 8 === 0) {
+        playTritoneAlarm(0.09);
+      }
     }
 
     currentStep++;
@@ -568,14 +580,14 @@ export function createChain10Bgm(audio, state) {
     }
 
     if (state.getTimeBonusActive?.()) {
-      const stepDuration = 60 / BONUS_BGM_BPM / 2;
+      const stepDuration = 60 / TIME_BONUS.bgm.bpm / 2;
       runBonusLoop(stepDuration);
       return;
     }
 
     const timeRatio = Math.max(
       0,
-      Math.min(1, (MAX_TIME - state.getTimeLeft()) / MAX_TIME),
+      Math.min(1, (TIMER.max - state.getTimeLeft()) / TIMER.max),
     );
     const bpm = 120 + timeRatio * 65;
     const stepDuration = 60 / bpm / 2;

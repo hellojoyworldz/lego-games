@@ -3,53 +3,25 @@ import { createAudioEngine } from "./audio/engine.js";
 import { createSynthSfx } from "./audio/synth-sfx.js";
 import { triggerHaptic } from "./haptics.js";
 import { createChain10Bgm } from "./bgm.js";
+import { renderTutorial } from "./tutorial.js";
+import { updateBestRecord, loadBestRecord } from "./scores.js";
+import { appendPlayRun, formatSurvivalTime, renderPlayHistory } from "./history.js";
+import { clearAllGameStorage } from "./storage.js";
+import { initI18n, onLocaleChange, t, syncMuteTooltip } from "./i18n/index.js";
 import {
-  BALL_RADIUS,
-  GRAVITY,
-  FRICTION,
-  RESTITUTION,
-  DEADLINE_Y,
-  BALL_COLOR,
-  INITIAL_TIME,
-  MAX_TIME,
   TARGET_FPS,
-  POP_REWARDS,
-  PERFECT_CLEAR_SCORE,
-  PERFECT_CLEAR_TIME,
-  COMBO_RESET,
-  COMBO_START_AFTER,
-  COMBO_DISPLAY_SUFFIX,
-  COMBO_PITCH_START,
-  COMBO_PITCH_STEP,
-  COMBO_PITCH_MAX,
-  PERFECT_PITCH_START,
-  PERFECT_PITCH_STEP,
-  PERFECT_PITCH_MAX,
-  FEVER_COMBO_INTERVAL,
-  FEVER_COUNTDOWN_SECONDS,
-  FEVER_GOLDEN_SCORE,
-  FEVER_SPAWN_INTERVAL,
-  FEVER_METEOR_SPAWN_INTERVAL,
-  GOLDEN_TEN_BALL,
-  BONUS_SURVIVAL_INTERVAL,
-  BONUS_COUNTDOWN_SECONDS,
-  BONUS_PITCH,
-  PENALTY_DURATION,
-  STACK_OVER_LIMIT,
-  STACK_SETTLED_VELOCITY,
-  DANGER_TIME_THRESHOLD,
-  HURRY_UP_PITCH,
-  HURRY_UP_PLAY_EVERY,
-  TIME_DECAY_SCALE,
-  ADD_BALL_COUNT,
-  MATCH_SPAWN_COUNT,
-  ADD_BALL_STAGGER,
-  SHUFFLE_MIN_FRAMES,
-  SHUFFLE_SETTLE_FRAMES,
-  HINT_DURATION,
-  HINT_COOLDOWN,
-  HINT_IDLE_TIME,
-  TIME_BONUS_BALL,
+  PHYSICS,
+  TIMER,
+  MATCH,
+  COMBO,
+  FEVER,
+  TIME_BONUS,
+  FIELD,
+  STACK,
+  SHUFFLE,
+  HINT,
+  SFX,
+  BALL_COLOR,
 } from "./config.js";
 
 /** @param {CanvasGradient} grad @param {[number, string][]} stops */
@@ -60,12 +32,11 @@ function applyGradientStops(grad, stops) {
 }
 
 /**
- * @param {typeof GOLDEN_TEN_BALL | typeof TIME_BONUS_BALL} style
+ * @param {typeof FEVER.ballColor | typeof TIME_BONUS.ballColor} style
  * @param {number} pulsePhase
  */
 function paintSpecialBallBody(style, x, y, baseRadius, pulsePhase) {
-  const glow =
-    style.shadowGlowMin + Math.sin(pulsePhase) * style.shadowGlowAmp;
+  const glow = style.shadowGlowMin + Math.sin(pulsePhase) * style.shadowGlowAmp;
   const visualRadius =
     baseRadius *
     (style.radiusScale + Math.sin(pulsePhase) * style.radiusPulseAmp);
@@ -118,7 +89,11 @@ const screens = {
 const pauseOverlay = document.getElementById("pause-overlay");
 const btnPause = document.getElementById("btn-pause");
 const tutorialBtn = document.getElementById("btn-tutorial");
+const historyBtn = document.getElementById("btn-history");
+const resetBtn = document.getElementById("btn-reset");
 const tutorialModal = document.getElementById("tutorial-modal");
+const historyModal = document.getElementById("history-modal");
+const resetModal = document.getElementById("reset-modal");
 const gameContainer = document.getElementById("game-container");
 const feverOverlay = document.getElementById("fever-overlay");
 const feverTitle = document.getElementById("fever-title");
@@ -151,8 +126,12 @@ function showScreen(name) {
     el.classList.toggle("hidden", key !== name);
   }
   tutorialBtn?.classList.toggle("hidden", name === "playing");
+  historyBtn?.classList.toggle("hidden", name === "playing");
   gameContainer?.classList.toggle("game-container--intro", name === "intro");
+  gameContainer?.classList.toggle("game-container--result", name === "result");
   closeTutorialModal();
+  closeHistoryModal();
+  closeResetModal();
   if (name !== "playing") {
     hidePauseOverlay();
     gamePaused = false;
@@ -168,6 +147,65 @@ function openTutorialModal() {
 
 function closeTutorialModal() {
   tutorialModal?.classList.add("hidden");
+}
+
+function openHistoryModal() {
+  renderPlayHistory();
+  historyModal?.classList.remove("hidden");
+}
+
+function closeHistoryModal() {
+  historyModal?.classList.add("hidden");
+}
+
+function openResetModal() {
+  resetModal?.classList.remove("hidden");
+}
+
+function closeResetModal() {
+  resetModal?.classList.add("hidden");
+}
+
+const RESULT_VALUE_IDS = [
+  "final-score",
+  "final-max-combo",
+  "final-time",
+  "final-best-score",
+  "final-best-combo",
+  "final-best-time",
+];
+
+/** @param {boolean} isNew */
+function setResultValueNewRecord(id, isNew) {
+  document.getElementById(id)?.classList.toggle("result-card__value--new-record", isNew);
+}
+
+function clearResultValueHighlights() {
+  RESULT_VALUE_IDS.forEach((id) => setResultValueNewRecord(id, false));
+}
+
+function refreshBestRecordDisplays() {
+  const best = loadBestRecord();
+  document.getElementById("final-best-score").innerText =
+    best.score.toLocaleString();
+  document.getElementById("final-best-combo").innerText =
+    formatMaxComboDisplay(best.maxComboLevel);
+  document.getElementById("final-best-time").innerText = formatSurvivalTime(
+    best.survivalFrames,
+  );
+  clearResultValueHighlights();
+  const newRecordBadge = document.getElementById("result-new-record");
+  newRecordBadge?.classList.add("hidden");
+}
+
+function confirmResetStorage() {
+  clearAllGameStorage();
+  closeResetModal();
+  closeHistoryModal();
+  renderPlayHistory();
+  if (!screens.result.classList.contains("hidden")) {
+    refreshBestRecordDisplays();
+  }
 }
 
 function showPauseOverlay() {
@@ -190,10 +228,7 @@ function pauseGame() {
     animationFrameId = null;
   }
 
-  balls.forEach((b) => {
-    b.selected = false;
-  });
-  selectedBalls = [];
+  clearAllBallSelection();
   updateEquation();
 }
 
@@ -222,7 +257,7 @@ function quitGame() {
     animationFrameId = null;
   }
 
-  showResultScreen("You quit the game.");
+  showResultScreen("quit");
 }
 
 const audio = createAudioEngine();
@@ -235,7 +270,8 @@ let particles = [];
 let floatingTexts = [];
 
 let score = 0;
-let timeLeft = INITIAL_TIME;
+let lastGameOverReasonKey = "timeOut";
+let timeLeft = TIMER.initial;
 let gameActive = false;
 let gamePaused = false;
 let gameEndingState = false;
@@ -245,6 +281,7 @@ let lastTime = 0;
 let penaltyTime = 0;
 let matchStreak = 0; // 연속 10 성공 횟수
 let maxComboLevel = 0; // 달성한 최대 콤보 단계
+let perfectClearCount = 0; // 퍼펙트 클리어 횟수
 let comboResetTimer = 0;
 let stackOverTime = 0;
 let hintCooldown = 0;
@@ -254,7 +291,7 @@ let feverActive = false;
 /** @type {'play'|null} */
 let feverPhase = null;
 let feverTimer = 0;
-let feverCountdownStep = FEVER_COUNTDOWN_SECONDS;
+let feverCountdownStep = FEVER.countdownSeconds;
 let feverTier = 1;
 let feverSpawnCooldown = 0;
 let feverMeteorCooldown = 0;
@@ -262,7 +299,7 @@ let feverMeteorCooldown = 0;
 let meteorStreaks = [];
 let timeBonusActive = false;
 let timeBonusTimer = 0;
-let timeBonusCountdownStep = BONUS_COUNTDOWN_SECONDS;
+let timeBonusCountdownStep = TIME_BONUS.countdownSeconds;
 let lastTimeBonusTier = 0;
 let pendingTimeBonus = false;
 let dangerZoneEnterCount = 0;
@@ -289,11 +326,11 @@ function playSfx(type, selectCount = 1) {
     return;
   }
   if (type === "hurryUp") {
-    sfx.play(type, 1, HURRY_UP_PITCH);
+    sfx.play(type, 1, SFX.hurryUp.pitch);
     return;
   }
   if (type === "bonus") {
-    sfx.play(type, 1, BONUS_PITCH);
+    sfx.play(type, 1, TIME_BONUS.sfxPitch);
     return;
   }
   sfx.play(type, selectCount);
@@ -309,7 +346,7 @@ function stopBgmEngine() {
 
 function updateDangerVoice() {
   const inDangerTime =
-    !feverActive && !timeBonusActive && timeLeft < DANGER_TIME_THRESHOLD;
+    !feverActive && !timeBonusActive && timeLeft < TIMER.dangerThreshold;
 
   if (!inDangerTime) {
     wasInDangerTime = false;
@@ -321,7 +358,7 @@ function updateDangerVoice() {
   wasInDangerTime = true;
   dangerZoneEnterCount++;
 
-  if (dangerZoneEnterCount % HURRY_UP_PLAY_EVERY === 1) {
+  if (dangerZoneEnterCount % TIMER.hurryUpEvery === 1) {
     playSfx("hurryUp");
   }
 }
@@ -369,7 +406,8 @@ class MeteorStreak {
     this.width = 1.5 + Math.random() * 3;
     this.alpha = 0.75 + Math.random() * 0.25;
     this.decay = 0.003 + Math.random() * 0.004;
-    this.color = Math.random() > 0.25 ? GOLDEN_TEN_BALL.particleGlow : "#FFFFFF";
+    this.color =
+      Math.random() > 0.25 ? FEVER.ballColor.particleGlow : "#FFFFFF";
   }
 
   update() {
@@ -387,14 +425,14 @@ class MeteorStreak {
     const tailX = this.x - this.vx * 7;
     const tailY = this.y - this.vy * 3.5;
     const grad = ctx.createLinearGradient(tailX, tailY, this.x, this.y);
-    grad.addColorStop(0, GOLDEN_TEN_BALL.meteorTailFade);
+    grad.addColorStop(0, FEVER.ballColor.meteorTailFade);
     grad.addColorStop(0.45, this.color);
     grad.addColorStop(1, "#FFFFFF");
 
     ctx.strokeStyle = grad;
     ctx.lineWidth = this.width;
     ctx.shadowBlur = 14;
-    ctx.shadowColor = GOLDEN_TEN_BALL.meteorShadow;
+    ctx.shadowColor = FEVER.ballColor.meteorShadow;
     ctx.beginPath();
     ctx.moveTo(tailX, tailY);
     ctx.lineTo(this.x, this.y);
@@ -402,7 +440,7 @@ class MeteorStreak {
 
     ctx.fillStyle = "#FFFFFF";
     ctx.shadowBlur = 20;
-    ctx.shadowColor = GOLDEN_TEN_BALL.particleFill;
+    ctx.shadowColor = FEVER.ballColor.particleFill;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.width + 1.2, 0, Math.PI * 2);
     ctx.fill();
@@ -446,7 +484,7 @@ class Ball {
     this.y = y;
     this.vx = (Math.random() - 0.5) * 4;
     this.vy = -Math.random() * 1.5;
-    this.radius = BALL_RADIUS;
+    this.radius = PHYSICS.ballRadius;
     this.number = number;
     this.color = BALL_COLOR.map[number];
     this.selected = false;
@@ -459,28 +497,39 @@ class Ball {
   }
 
   update() {
-    this.vy += GRAVITY;
-    this.vx *= FRICTION;
-    this.vy *= FRICTION;
+    if (this.selected) {
+      if (this.selectAnchorX != null) {
+        this.x = this.selectAnchorX;
+        this.y = this.selectAnchorY;
+      }
+      this.vx = 0;
+      this.vy = 0;
+      return;
+    }
+
+    this.vy += PHYSICS.gravity;
+    this.vx *= PHYSICS.friction;
+    this.vy *= PHYSICS.friction;
 
     this.x += this.vx;
     this.y += this.vy;
 
     const { width: displayWidth, height: displayHeight } = getDisplaySize();
+    const floorY = displayHeight - PHYSICS.playfieldBottomPad;
 
     // 좌우 벽 통통 바운드
     if (this.x - this.radius < 0) {
       this.x = this.radius;
-      this.vx = -this.vx * RESTITUTION;
+      this.vx = -this.vx * PHYSICS.restitution;
     } else if (this.x + this.radius > displayWidth) {
       this.x = displayWidth - this.radius;
-      this.vx = -this.vx * RESTITUTION;
+      this.vx = -this.vx * PHYSICS.restitution;
     }
 
     // 바닥 밀착 반사 바운드
-    if (this.y + this.radius > displayHeight) {
-      this.y = displayHeight - this.radius;
-      this.vy = -this.vy * RESTITUTION;
+    if (this.y + this.radius > floorY) {
+      this.y = floorY - this.radius;
+      this.vy = -this.vy * PHYSICS.restitution;
     }
   }
 
@@ -491,30 +540,25 @@ class Ball {
     let visualRadius = this.radius;
 
     if (this.isGoldenTen) {
-      this.goldenPulse += GOLDEN_TEN_BALL.pulseSpeed;
+      this.goldenPulse += FEVER.ballColor.pulseSpeed;
       visualRadius = paintSpecialBallBody(
-        GOLDEN_TEN_BALL,
+        FEVER.ballColor,
         this.x,
         this.y,
         this.radius,
         this.goldenPulse,
       );
     } else if (this.isTimeBonusFive) {
-      this.goldenPulse += TIME_BONUS_BALL.pulseSpeed;
+      this.goldenPulse += TIME_BONUS.ballColor.pulseSpeed;
       visualRadius = paintSpecialBallBody(
-        TIME_BONUS_BALL,
+        TIME_BONUS.ballColor,
         this.x,
         this.y,
         this.radius,
         this.goldenPulse,
       );
     } else if (this.selected) {
-      this.pulseTimer += 0.25;
-      const scaleFactor = 1.12 + Math.sin(this.pulseTimer) * 0.05;
-      visualRadius *= scaleFactor;
-
-      ctx.shadowBlur = 22;
-      ctx.shadowColor = "#ffffff";
+      ctx.shadowBlur = 0;
       ctx.fillStyle = "#ffffff";
     } else {
       ctx.shadowBlur = 0;
@@ -534,12 +578,12 @@ class Ball {
       visualRadius,
     );
     if (this.isGoldenTen) {
-      applyGradientStops(grad, GOLDEN_TEN_BALL.highlightStops);
+      applyGradientStops(grad, FEVER.ballColor.highlightStops);
+    } else if (this.isTimeBonusFive) {
+      applyGradientStops(grad, TIME_BONUS.ballColor.highlightStops);
     } else if (this.selected) {
       grad.addColorStop(0, "rgba(255, 255, 255, 0.45)");
       grad.addColorStop(1, "rgba(0, 0, 0, 0.22)");
-    } else if (this.isTimeBonusFive) {
-      applyGradientStops(grad, TIME_BONUS_BALL.highlightStops);
     } else {
       applyGradientStops(grad, BALL_COLOR.highlightStops);
     }
@@ -585,6 +629,34 @@ class Ball {
   }
 }
 
+function pinSelectedBallPositions() {
+  for (const b of balls) {
+    if (!b.selected || b.selectAnchorX == null) continue;
+    b.x = b.selectAnchorX;
+    b.y = b.selectAnchorY;
+    b.vx = 0;
+    b.vy = 0;
+  }
+}
+
+function anchorSelectedBall(b) {
+  b.selectAnchorX = b.x;
+  b.selectAnchorY = b.y;
+}
+
+function releaseSelectedBall(b) {
+  delete b.selectAnchorX;
+  delete b.selectAnchorY;
+}
+
+function clearAllBallSelection() {
+  balls.forEach((b) => {
+    b.selected = false;
+    releaseSelectedBall(b);
+  });
+  selectedBalls = [];
+}
+
 // 구슬 탄성체 격돌 처리 물리 분산 공식
 function resolveCollisions() {
   for (let i = 0; i < balls.length; i++) {
@@ -602,19 +674,36 @@ function resolveCollisions() {
         const nx = dx / (distance || 1);
         const ny = dy / (distance || 1);
 
-        b1.x -= nx * overlap * 0.5;
-        b1.y -= ny * overlap * 0.5;
-        b2.x += nx * overlap * 0.5;
-        b2.y += ny * overlap * 0.5;
+        if (b1.selected && !b2.selected) {
+          b2.x += nx * overlap;
+          b2.y += ny * overlap;
+        } else if (b2.selected && !b1.selected) {
+          b1.x -= nx * overlap;
+          b1.y -= ny * overlap;
+        } else if (!b1.selected && !b2.selected) {
+          b1.x -= nx * overlap * 0.5;
+          b1.y -= ny * overlap * 0.5;
+          b2.x += nx * overlap * 0.5;
+          b2.y += ny * overlap * 0.5;
+        } else if (b1.selected && b2.selected) {
+          b1.x -= nx * overlap * 0.5;
+          b1.y -= ny * overlap * 0.5;
+          b2.x += nx * overlap * 0.5;
+          b2.y += ny * overlap * 0.5;
+          anchorSelectedBall(b1);
+          anchorSelectedBall(b2);
+        }
+
+        if (b1.selected || b2.selected) continue;
 
         const kx = b1.vx - b2.vx;
         const ky = b1.vy - b2.vy;
         const p = (2 * (nx * kx + ny * ky)) / 2;
 
-        b1.vx -= p * nx * RESTITUTION;
-        b1.vy -= p * ny * RESTITUTION;
-        b2.vx += p * nx * RESTITUTION;
-        b2.vy += p * ny * RESTITUTION;
+        b1.vx -= p * nx * PHYSICS.restitution;
+        b1.vy -= p * ny * PHYSICS.restitution;
+        b2.vx += p * nx * PHYSICS.restitution;
+        b2.vy += p * ny * PHYSICS.restitution;
       }
     }
   }
@@ -623,12 +712,12 @@ function resolveCollisions() {
 // 특정 좌표 혹은 무작위 낙하선상에 구슬 생성
 function spawnBall(customX = null, customY = null) {
   const displayWidth = getDisplaySize().width;
-  const margin = BALL_RADIUS * 2;
+  const margin = PHYSICS.ballRadius * 2;
   const x =
     customX !== null
       ? customX
       : margin + Math.random() * (displayWidth - margin * 2);
-  const y = customY !== null ? customY : -BALL_RADIUS * 2;
+  const y = customY !== null ? customY : -PHYSICS.ballRadius * 2;
   const number = Math.floor(Math.random() * 9) + 1;
   const ball = new Ball(x, y, number);
   if (timeBonusActive) {
@@ -636,6 +725,41 @@ function spawnBall(customX = null, customY = null) {
   }
   balls.push(ball);
 }
+
+/** 창 크기 변경 시 바닥·벽 기준으로 기존 구슬 재배치 (공중에 떠서 줄줄이 떨어지는 현상 방지) */
+function settleBallsAfterResize() {
+  if (!gameActive || gamePaused) return;
+
+  const { width: displayWidth, height: displayHeight } = getDisplaySize();
+  const floorY = displayHeight - PHYSICS.playfieldBottomPad;
+
+  for (const b of balls) {
+    b.vx = 0;
+    b.vy = 0;
+    b.x = Math.min(Math.max(b.x, b.radius), displayWidth - b.radius);
+    if (b.y + b.radius > floorY) {
+      b.y = floorY - b.radius;
+    }
+    if (b.selected && b.selectAnchorX != null) {
+      b.selectAnchorX = b.x;
+      b.selectAnchorY = b.y;
+    }
+  }
+}
+
+function bindPlayfieldResize() {
+  let resizeTimer = 0;
+  const onResize = () => {
+    resize();
+    if (!gameActive || gamePaused) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(settleBallsAfterResize, 0);
+  };
+  window.addEventListener("resize", onResize);
+  window.visualViewport?.addEventListener("resize", onResize);
+}
+
+bindPlayfieldResize();
 
 // 그리드형 예쁜 정렬 초기 셋업
 function initField() {
@@ -653,17 +777,23 @@ function initField() {
 
   const displayWidth = getDisplaySize().width;
   const displayHeight = getDisplaySize().height;
+  const floorY = displayHeight - PHYSICS.playfieldBottomPad;
 
-  const cols = 5;
-  const rows = 4;
-  const startX = displayWidth / 2 - (cols - 1) * BALL_RADIUS * 1.1;
-  const startY = displayHeight - 250;
+  const cols = FIELD.grid.cols;
+  const rows = FIELD.grid.rows;
+  const startX = displayWidth / 2 - (cols - 1) * PHYSICS.ballRadius * 1.1;
+  const stackHeight =
+    (rows - 1) * PHYSICS.ballRadius * 1.8 + PHYSICS.ballRadius * 2;
+  const startY = Math.max(
+    PHYSICS.deadlineY + PHYSICS.ballRadius * 2,
+    floorY - stackHeight,
+  );
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const offset = (r % 2) * BALL_RADIUS * 0.55;
-      const x = startX + c * BALL_RADIUS * 2.2 + offset;
-      const y = startY + r * BALL_RADIUS * 1.8;
+      const offset = (r % 2) * PHYSICS.ballRadius * 0.55;
+      const x = startX + c * PHYSICS.ballRadius * 2.2 + offset;
+      const y = startY + r * PHYSICS.ballRadius * 1.8;
       spawnBall(x, y);
     }
   }
@@ -720,7 +850,7 @@ function updateHintButtonState() {
 
 function isBallFallingFromAbove(b) {
   const top = b.y - b.radius;
-  return top < DEADLINE_Y && b.vy > STACK_SETTLED_VELOCITY;
+  return top < PHYSICS.deadlineY && b.vy > PHYSICS.stackSettledVelocity;
 }
 
 function getPileHeadTop() {
@@ -737,21 +867,21 @@ function isAddBallBlockedByStack() {
   if (stackOverTime > 0) return true;
 
   const headTop = getPileHeadTop();
-  return Number.isFinite(headTop) && headTop <= DEADLINE_Y;
+  return Number.isFinite(headTop) && headTop <= PHYSICS.deadlineY;
 }
 
 function areAllBallsSettled() {
   if (balls.length === 0) return true;
   return balls.every(
     (b) =>
-      Math.abs(b.vy) < STACK_SETTLED_VELOCITY &&
-      Math.abs(b.vx) < STACK_SETTLED_VELOCITY,
+      Math.abs(b.vy) < PHYSICS.stackSettledVelocity &&
+      Math.abs(b.vx) < PHYSICS.stackSettledVelocity,
   );
 }
 
 function beginShuffleSettling() {
   shuffleSettling = true;
-  shuffleMinTimer = SHUFFLE_MIN_FRAMES;
+  shuffleMinTimer = SHUFFLE.minFrames;
   shuffleSettledFrames = 0;
 }
 
@@ -766,7 +896,7 @@ function tickShuffleSettling() {
     shuffleSettledFrames = 0;
   }
 
-  if (shuffleMinTimer === 0 && shuffleSettledFrames >= SHUFFLE_SETTLE_FRAMES) {
+  if (shuffleMinTimer === 0 && shuffleSettledFrames >= SHUFFLE.settleFrames) {
     shuffleSettling = false;
     shuffleMinTimer = 0;
     shuffleSettledFrames = 0;
@@ -788,11 +918,11 @@ function updateShuffleButtonState() {
 
   shuffleBtn.disabled = blocked;
   if (shuffleSettling) {
-    shuffleBtn.title = "Shuffling…";
+    shuffleBtn.title = t("play.shufflingTitle");
   } else if (dockBlocked) {
-    shuffleBtn.title = "Shuffle marbles (unavailable)";
+    shuffleBtn.title = t("play.shuffleUnavailable");
   } else {
-    shuffleBtn.title = "Shuffle marbles";
+    shuffleBtn.title = t("play.shuffleTitle");
   }
 }
 
@@ -812,11 +942,11 @@ function updateAddBallButtonState() {
 
   btn.disabled = blocked;
   if (stackOver) {
-    btn.title = "Pile reached the limit line!";
+    btn.title = t("play.pileLimit");
   } else if (blocked) {
-    btn.title = "Add marbles (unavailable)";
+    btn.title = t("play.addBallUnavailable");
   } else {
-    btn.title = "Add marbles";
+    btn.title = t("play.addBallTitle");
   }
 }
 
@@ -851,7 +981,7 @@ function showHint(isAuto = false) {
   if (!combo) {
     if (!isAuto) {
       const eqDiv = document.getElementById("equation");
-      eqDiv.innerText = "No combo to 10 right now";
+      eqDiv.innerText = t("hint.none");
       setEquationState(eqDiv, "warning");
       setTimeout(updateEquation, 1500);
     }
@@ -861,16 +991,16 @@ function showHint(isAuto = false) {
   clearHint();
   hintedBalls = combo;
   combo.forEach((b) => {
-    b.hintGlowTimer = HINT_DURATION;
+    b.hintGlowTimer = HINT.duration;
   });
 
-  hintCooldown = HINT_COOLDOWN;
+  hintCooldown = HINT.cooldown;
   idleSinceMatch = 0;
   updatePlayDockButtons();
 
   const nums = combo.map((b) => b.number);
   const eqDiv = document.getElementById("equation");
-  eqDiv.innerText = `💡 ${nums.join(" + ")} = 10`;
+  eqDiv.innerText = t("hint.preview", { expr: nums.join(" + ") });
   setEquationState(eqDiv, "hint");
 
   const centroidX = combo.reduce((acc, b) => acc + b.x, 0) / combo.length;
@@ -891,7 +1021,7 @@ function showHint(isAuto = false) {
     () => {
       if (selectedBalls.length === 0) updateEquation();
     },
-    HINT_DURATION * (1000 / TARGET_FPS),
+    HINT.duration * (1000 / TARGET_FPS),
   );
 
   return true;
@@ -917,11 +1047,13 @@ function updateEquation() {
   const eqDiv = document.getElementById("equation");
   if (selectedBalls.length === 0) {
     if (timeBonusActive) {
-      eqDiv.innerText = `TIME BONUS ${timeBonusCountdownStep}`;
+      eqDiv.innerText = t("equation.timeBonus", {
+        step: timeBonusCountdownStep,
+      });
       setEquationState(eqDiv, "hint");
       return;
     }
-    eqDiv.innerHTML = "Waiting";
+    eqDiv.innerText = "Waiting";
     setEquationState(eqDiv, "idle");
     return;
   }
@@ -943,14 +1075,16 @@ function updateEquation() {
 
 // 영예로운 퍼펙트 클리어 시그널 작동기
 function triggerPerfectClear() {
+  perfectClearCount++;
   playSfx("perfect");
   triggerHaptic("perfect");
   triggerScreenShake(true);
 
-  score += PERFECT_CLEAR_SCORE;
+  score += MATCH.perfectClear.score;
   document.getElementById("score").innerText = score;
 
-  timeLeft = Math.min(timeLeft + PERFECT_CLEAR_TIME, MAX_TIME);
+  timeLeft = Math.min(timeLeft + MATCH.perfectClear.time, TIMER.max);
+  syncTimerHUD();
 
   // 무지개 폭포 파티클 다발 생성
   const displayWidth = getDisplaySize().width;
@@ -978,7 +1112,9 @@ function triggerPerfectClear() {
     new FloatingText(
       displayWidth / 2,
       displayHeight / 2,
-      `PERFECT!!! +${PERFECT_CLEAR_SCORE.toLocaleString()}`,
+      t("perfect.floating", {
+        score: MATCH.perfectClear.score.toLocaleString(),
+      }),
       "#FBBF24",
       true,
     ),
@@ -987,7 +1123,7 @@ function triggerPerfectClear() {
     new FloatingText(
       displayWidth / 2,
       displayHeight / 2 + 35,
-      `TIME +${PERFECT_CLEAR_TIME / TARGET_FPS}s`,
+      `TIME +${MATCH.perfectClear.time / TARGET_FPS}s`,
       "#34D399",
       true,
     ),
@@ -1006,28 +1142,73 @@ function formatMaxComboDisplay(maxLevel) {
 
 /** @param {number} streak 연속 10 성공 횟수 */
 function getComboLevel(streak) {
-  return streak > COMBO_START_AFTER ? streak - COMBO_START_AFTER : 0;
+  return streak > COMBO.startAfter ? streak - COMBO.startAfter : 0;
 }
 
-function showResultScreen(reason) {
-  document.getElementById("gameover-reason").innerText = reason;
-  document.getElementById("final-score").innerText = score;
+function showResultScreen(reasonKey) {
+  lastGameOverReasonKey = reasonKey;
+  const {
+    isNewBestScore,
+    isNewBestCombo,
+    isNewBestTime,
+    bestScore,
+    bestMaxCombo,
+    bestSurvivalFrames,
+  } = updateBestRecord({
+    score,
+    maxComboLevel,
+    survivalFrames: playTime,
+  });
+
+  appendPlayRun({
+    score,
+    survivalFrames: playTime,
+    maxComboLevel,
+    perfectClearCount,
+    reasonKey,
+  });
+
+  document.getElementById("gameover-reason").innerText = t(
+    `gameover.${reasonKey}`,
+  );
+  document.getElementById("final-score").innerText = score.toLocaleString();
   document.getElementById("final-max-combo").innerText =
     formatMaxComboDisplay(maxComboLevel);
   document.getElementById("final-time").innerText =
     document.getElementById("survival-time").innerText;
+  document.getElementById("final-best-score").innerText =
+    bestScore.toLocaleString();
+  document.getElementById("final-best-combo").innerText =
+    formatMaxComboDisplay(bestMaxCombo);
+  document.getElementById("final-best-time").innerText =
+    formatSurvivalTime(bestSurvivalFrames);
+
+  clearResultValueHighlights();
+  setResultValueNewRecord("final-score", isNewBestScore);
+  setResultValueNewRecord("final-max-combo", isNewBestCombo);
+  setResultValueNewRecord("final-time", isNewBestTime);
+  setResultValueNewRecord("final-best-score", isNewBestScore);
+  setResultValueNewRecord("final-best-combo", isNewBestCombo);
+  setResultValueNewRecord("final-best-time", isNewBestTime);
+
+  const newRecordBadge = document.getElementById("result-new-record");
+  newRecordBadge.classList.toggle(
+    "hidden",
+    !(isNewBestScore || isNewBestCombo || isNewBestTime),
+  );
+
   showScreen("result");
 }
 
 function formatComboDisplay(comboLevel) {
-  if (comboLevel <= 0) return COMBO_DISPLAY_SUFFIX;
-  return `${comboLevel}${COMBO_DISPLAY_SUFFIX}`;
+  if (comboLevel <= 0) return COMBO.displaySuffix;
+  return `${comboLevel}${COMBO.displaySuffix}`;
 }
 
 /** FEVER 구간마다 콤보 SFX pitch를 1부터 다시 올림 (7콤보→리셋→8콤보=1콤보 pitch) */
 function getComboPitchLevel(comboLevel) {
   if (comboLevel <= 0) return 0;
-  return ((comboLevel - 1) % FEVER_COMBO_INTERVAL) + 1;
+  return ((comboLevel - 1) % FEVER.comboInterval) + 1;
 }
 
 function getComboPitchSteps(comboLevel) {
@@ -1035,23 +1216,25 @@ function getComboPitchSteps(comboLevel) {
 }
 
 function applyComboPitchCap(value) {
-  return COMBO_PITCH_MAX == null ? value : Math.min(value, COMBO_PITCH_MAX);
+  return COMBO.pitchMax == null ? value : Math.min(value, COMBO.pitchMax);
 }
 
 function applyPerfectPitchCap(value) {
-  return PERFECT_PITCH_MAX == null ? value : Math.min(value, PERFECT_PITCH_MAX);
+  return SFX.perfect.pitchMax == null
+    ? value
+    : Math.min(value, SFX.perfect.pitchMax);
 }
 
 function getComboSfxPitchUp(comboLevel) {
   const rate =
-    COMBO_PITCH_START + getComboPitchSteps(comboLevel) * COMBO_PITCH_STEP;
+    COMBO.pitchStart + getComboPitchSteps(comboLevel) * COMBO.pitchStep;
   return applyComboPitchCap(Math.max(rate, 0.5));
 }
 
 /** @param {number} [tier] FEVER 단계 (1=10콤보, 2=20콤보…) */
 function getPerfectSfxPitchUp(tier = 1) {
   const steps = Math.max(tier - 1, 0);
-  const rate = PERFECT_PITCH_START + steps * PERFECT_PITCH_STEP;
+  const rate = SFX.perfect.pitchStart + steps * SFX.perfect.pitchStep;
   return applyPerfectPitchCap(Math.max(rate, 0.5));
 }
 
@@ -1095,8 +1278,7 @@ function triggerComboCelebration(combo) {
 
 function shouldTriggerFever(comboLevel) {
   return (
-    comboLevel >= FEVER_COMBO_INTERVAL &&
-    comboLevel % FEVER_COMBO_INTERVAL === 0
+    comboLevel >= FEVER.comboInterval && comboLevel % FEVER.comboInterval === 0
   );
 }
 
@@ -1104,13 +1286,13 @@ function resetFeverState() {
   feverActive = false;
   feverPhase = null;
   feverTimer = 0;
-  feverCountdownStep = FEVER_COUNTDOWN_SECONDS;
+  feverCountdownStep = FEVER.countdownSeconds;
   feverTier = 1;
   feverSpawnCooldown = 0;
   feverMeteorCooldown = 0;
   meteorStreaks = [];
   feverOverlay?.classList.add("hidden");
-  feverOverlay?.classList.remove("fever-overlay--play");
+  feverOverlay?.classList.remove("mode-overlay--play");
   feverVignette?.classList.remove("fever-vignette--active");
   gameContainer?.classList.remove("game-container--fever");
   timerBar?.classList.remove("timer-bar--frozen", "timer-bar--danger");
@@ -1120,7 +1302,7 @@ function resetFeverState() {
 function convertBallToGoldenTen(ball) {
   ball.number = 10;
   ball.isGoldenTen = true;
-  ball.color = GOLDEN_TEN_BALL.fillBottom;
+  ball.color = FEVER.ballColor.fillBottom;
   ball.selected = false;
   ball.hintGlowTimer = 0;
 }
@@ -1131,9 +1313,9 @@ function convertAllBallsToGoldenTen() {
 
 function spawnGoldenTenBall() {
   const displayWidth = getDisplaySize().width;
-  const margin = BALL_RADIUS * 2;
+  const margin = PHYSICS.ballRadius * 2;
   const x = margin + Math.random() * (displayWidth - margin * 2);
-  const ball = new Ball(x, -BALL_RADIUS * 2, 10);
+  const ball = new Ball(x, -PHYSICS.ballRadius * 2, 10);
   convertBallToGoldenTen(ball);
   ball.vy = 2.5 + Math.random() * 2;
   balls.push(ball);
@@ -1155,28 +1337,36 @@ function syncFeverOverlay() {
 
   if (!feverActive) {
     feverOverlay.classList.add("hidden");
-    feverOverlay.classList.remove("fever-overlay--play");
+    feverOverlay.classList.remove("mode-overlay--play");
     return;
   }
 
   feverOverlay.classList.remove("hidden");
-  feverOverlay.classList.add("fever-overlay--play");
+  feverOverlay.classList.toggle("mode-overlay--play", feverPhase === "play");
   feverTitle?.classList.remove("hidden");
-  if (feverTitle) feverTitle.textContent = "PERFECT TEN!";
+  if (feverTitle) feverTitle.textContent = t("fever.title");
   feverCountdownEl?.classList.remove("hidden");
   if (feverCountdownEl) {
     feverCountdownEl.textContent = String(feverCountdownStep);
-    feverCountdownEl.classList.remove("fever-overlay__countdown--pop");
+    feverCountdownEl.classList.remove("mode-overlay__countdown--pop");
     void feverCountdownEl.offsetWidth;
-    feverCountdownEl.classList.add("fever-overlay__countdown--pop");
+    feverCountdownEl.classList.add("mode-overlay__countdown--pop");
   }
 }
 
 function updateFeverEquation() {
   const eqDiv = document.getElementById("equation");
-  if (!eqDiv || feverPhase !== "play") return;
+  if (!eqDiv || !feverActive) return;
 
-  eqDiv.innerText = `Tap golden 10! ${feverCountdownStep}`;
+  if (feverPhase === "announce") {
+    eqDiv.innerText = t("equation.perfectTen");
+    setEquationState(eqDiv, "success");
+    return;
+  }
+
+  if (feverPhase !== "play") return;
+
+  eqDiv.innerText = t("equation.tapGolden", { step: feverCountdownStep });
   setEquationState(eqDiv, "success");
 }
 
@@ -1188,12 +1378,36 @@ function setTimerFrozenUI(frozen) {
   }
 }
 
+function syncTimerHUD() {
+  if (!timerBar) return;
+
+  const percent = (timeLeft / TIMER.max) * 100;
+  timerBar.style.width = `${Math.max(0, percent)}%`;
+  const timerTextEl = document.getElementById("timer-text");
+  if (timerTextEl) {
+    timerTextEl.innerText = Math.max(0, timeLeft / TARGET_FPS).toFixed(2);
+  }
+
+  const inSpecialMode = feverActive || timeBonusActive;
+  if (inSpecialMode) {
+    setTimerFrozenUI(true);
+    return;
+  }
+
+  setTimerFrozenUI(false);
+  if (percent < 30) {
+    timerBar.classList.add("timer-bar--danger");
+  } else {
+    timerBar.classList.remove("timer-bar--danger");
+  }
+}
+
 function startPerfectTenFever(comboLevel) {
   feverActive = true;
-  feverPhase = "play";
-  feverCountdownStep = FEVER_COUNTDOWN_SECONDS;
-  feverTimer = TARGET_FPS;
-  feverTier = Math.max(1, Math.floor(comboLevel / FEVER_COMBO_INTERVAL));
+  feverPhase = FEVER.announceTime > 0 ? "announce" : "play";
+  feverCountdownStep = FEVER.countdownSeconds;
+  feverTimer = FEVER.announceTime > 0 ? FEVER.announceTime : TARGET_FPS;
+  feverTier = Math.max(1, Math.floor(comboLevel / FEVER.comboInterval));
   feverSpawnCooldown = 0;
   selectedBalls = [];
   clearHint();
@@ -1222,7 +1436,7 @@ function startPerfectTenFever(comboLevel) {
       new PopParticle(
         Math.random() * displayWidth,
         Math.random() * displayHeight * 0.5,
-        GOLDEN_TEN_BALL.particleGlow,
+        FEVER.ballColor.particleGlow,
         true,
       ),
     );
@@ -1261,9 +1475,9 @@ function endPerfectTenFever() {
 function resetTimeBonusState() {
   timeBonusActive = false;
   timeBonusTimer = 0;
-  timeBonusCountdownStep = BONUS_COUNTDOWN_SECONDS;
+  timeBonusCountdownStep = TIME_BONUS.countdownSeconds;
   timeBonusOverlay?.classList.add("hidden");
-  timeBonusOverlay?.classList.remove("time-bonus-overlay--play");
+  timeBonusOverlay?.classList.remove("mode-overlay--play");
   gameContainer?.classList.remove("game-container--time-bonus");
   if (!feverActive) {
     timerBar?.classList.remove("timer-bar--frozen", "timer-bar--danger");
@@ -1278,7 +1492,7 @@ function convertBallToTimeBonusFive(ball) {
   }
   ball.isTimeBonusFive = true;
   ball.number = 5;
-  ball.color = TIME_BONUS_BALL.fill;
+  ball.color = TIME_BONUS.ballColor.fill;
   ball.selected = false;
   ball.hintGlowTimer = 0;
 }
@@ -1309,20 +1523,20 @@ function syncTimeBonusOverlay() {
 
   if (!timeBonusActive) {
     timeBonusOverlay.classList.add("hidden");
-    timeBonusOverlay.classList.remove("time-bonus-overlay--play");
+    timeBonusOverlay.classList.remove("mode-overlay--play");
     return;
   }
 
   timeBonusOverlay.classList.remove("hidden");
-  timeBonusOverlay.classList.add("time-bonus-overlay--play");
+  timeBonusOverlay.classList.add("mode-overlay--play");
   timeBonusTitle?.classList.remove("hidden");
-  if (timeBonusTitle) timeBonusTitle.textContent = "TIME BONUS";
+  if (timeBonusTitle) timeBonusTitle.textContent = t("timeBonus.title");
   timeBonusCountdownEl?.classList.remove("hidden");
   if (timeBonusCountdownEl) {
     timeBonusCountdownEl.textContent = String(timeBonusCountdownStep);
-    timeBonusCountdownEl.classList.remove("time-bonus-overlay__countdown--pop");
+    timeBonusCountdownEl.classList.remove("mode-overlay__countdown--pop");
     void timeBonusCountdownEl.offsetWidth;
-    timeBonusCountdownEl.classList.add("time-bonus-overlay__countdown--pop");
+    timeBonusCountdownEl.classList.add("mode-overlay__countdown--pop");
   }
 }
 
@@ -1333,7 +1547,7 @@ function updateTimeBonusEquation() {
 
 function updateTimeBonusTrigger() {
   if (timeBonusActive) return;
-  const tier = Math.floor(playTime / BONUS_SURVIVAL_INTERVAL);
+  const tier = Math.floor(playTime / TIME_BONUS.survivalInterval);
   if (tier <= lastTimeBonusTier) return;
 
   if (feverActive) {
@@ -1350,7 +1564,7 @@ function startTimeBonus() {
   if (feverActive || timeBonusActive) return;
 
   timeBonusActive = true;
-  timeBonusCountdownStep = BONUS_COUNTDOWN_SECONDS;
+  timeBonusCountdownStep = TIME_BONUS.countdownSeconds;
   timeBonusTimer = TARGET_FPS;
   selectedBalls = [];
   clearHint();
@@ -1373,7 +1587,9 @@ function startTimeBonus() {
       new PopParticle(
         Math.random() * displayWidth,
         Math.random() * displayHeight * 0.55,
-        i % 2 === 0 ? TIME_BONUS_BALL.particleGlow : TIME_BONUS_BALL.particleFill,
+        i % 2 === 0
+          ? TIME_BONUS.ballColor.particleGlow
+          : TIME_BONUS.ballColor.particleFill,
         true,
       ),
     );
@@ -1401,17 +1617,42 @@ function updateTimeBonusMode() {
 }
 
 function popGoldenTen(ball, index) {
-  const points = FEVER_GOLDEN_SCORE * feverTier;
+  const points = FEVER.goldenScore * feverTier;
   score += points;
   document.getElementById("score").innerText = score;
 
   for (let p = 0; p < 18; p++) {
-    particles.push(new PopParticle(ball.x, ball.y, GOLDEN_TEN_BALL.particleGlow, p % 3 === 0));
+    particles.push(
+      new PopParticle(
+        ball.x,
+        ball.y,
+        FEVER.ballColor.particleGlow,
+        p % 3 === 0,
+      ),
+    );
   }
   spawnMeteorStreaks(2);
   floatingTexts.push(
-    new FloatingText(ball.x, ball.y - 10, `+${points}`, GOLDEN_TEN_BALL.particleFill),
+    new FloatingText(
+      ball.x,
+      ball.y - 10,
+      `+${points}`,
+      FEVER.ballColor.particleFill,
+    ),
   );
+
+  if (FEVER.grantsMatchTime) {
+    timeLeft = Math.min(timeLeft + FEVER.goldenTime, TIMER.max);
+    syncTimerHUD();
+    floatingTexts.push(
+      new FloatingText(
+        ball.x,
+        ball.y - 25,
+        `+${(FEVER.goldenTime / TARGET_FPS).toFixed(1)}s`,
+        "#34D399",
+      ),
+    );
+  }
 
   playSfx("tap");
   triggerHaptic("pop");
@@ -1440,18 +1681,29 @@ function handleGoldenTenTap(clientX, clientY) {
 }
 
 function updateFeverMode() {
+  if (feverPhase === "announce") {
+    feverTimer--;
+    if (feverTimer <= 0) {
+      feverPhase = "play";
+      feverTimer = TARGET_FPS;
+      syncFeverOverlay();
+      updateFeverEquation();
+    }
+    return;
+  }
+
   if (feverPhase !== "play") return;
 
   feverSpawnCooldown--;
   if (feverSpawnCooldown <= 0) {
     spawnGoldenTenBall();
-    feverSpawnCooldown = FEVER_SPAWN_INTERVAL;
+    feverSpawnCooldown = FEVER.spawnInterval;
   }
 
   feverMeteorCooldown--;
   if (feverMeteorCooldown <= 0) {
     spawnMeteorStreaks(2 + Math.floor(Math.random() * 3));
-    feverMeteorCooldown = FEVER_METEOR_SPAWN_INTERVAL;
+    feverMeteorCooldown = FEVER.meteorSpawnInterval;
   }
 
   feverTimer--;
@@ -1473,30 +1725,40 @@ function checkSum() {
 
   if (sum === 10) {
     const popCount = selectedBalls.length;
-    matchStreak++;
-    const comboLevel = getComboLevel(matchStreak);
-    maxComboLevel = Math.max(maxComboLevel, comboLevel);
-    comboResetTimer = COMBO_RESET;
+    let comboLevel = 0;
+    if (!timeBonusActive) {
+      matchStreak++;
+      comboLevel = getComboLevel(matchStreak);
+      maxComboLevel = Math.max(maxComboLevel, comboLevel);
+      comboResetTimer = COMBO.reset;
+    }
     clearHint();
     idleSinceMatch = 0;
 
-    // 10 맞춤 SFX (매치마다) / 콤보 SFX·팝업은 COMBO_START_AFTER 초과부터
+    // 10 맞춤 SFX (매치마다) / 콤보 SFX·팝업은 COMBO.startAfter 초과부터 (TIME BONUS 제외)
     playSfx("pop", popCount);
     triggerHaptic("pop");
-    if (comboLevel >= 1) {
+    if (!timeBonusActive && comboLevel >= 1) {
       triggerComboCelebration(comboLevel);
     }
 
-    const popReward = POP_REWARDS[popCount >= 5 ? 5 : popCount];
-    const { time: rewardTime, score: baseScore } = popReward;
-
-    const scoreMultiplier = comboLevel > 0 ? matchStreak : 1;
+    const popReward = MATCH.popRewards[popCount >= 5 ? 5 : popCount];
+    const { time: rewardTime, score: normalScore } = popReward;
+    const baseScore = timeBonusActive ? TIME_BONUS.matchScore : normalScore;
+    const scoreMultiplier =
+      !timeBonusActive && comboLevel > 0 ? matchStreak : 1;
     const earnedScore = baseScore * scoreMultiplier;
     score += earnedScore;
     document.getElementById("score").innerText = score;
 
-    // 타임 보너스 누적
-    timeLeft = Math.min(timeLeft + rewardTime, MAX_TIME);
+    const grantMatchTime = !timeBonusActive || TIME_BONUS.grantsMatchTime;
+    let appliedTime = 0;
+    if (grantMatchTime) {
+      const timeToAdd = timeBonusActive ? TIME_BONUS.matchTime : rewardTime;
+      timeLeft = Math.min(timeLeft + timeToAdd, TIMER.max);
+      appliedTime = timeToAdd;
+      syncTimerHUD();
+    }
 
     // 스파크 폭발 연출 스폰
     selectedBalls.forEach((b) => {
@@ -1512,23 +1774,22 @@ function checkSum() {
     floatingTexts.push(
       new FloatingText(centroidX, centroidY, `+${earnedScore}!`, "#FBBF24"),
     );
-    floatingTexts.push(
-      new FloatingText(
-        centroidX,
-        centroidY - 25,
-        `+${(rewardTime / TARGET_FPS).toFixed(1)}s`,
-        "#34D399",
-      ),
-    );
+    if (appliedTime > 0) {
+      floatingTexts.push(
+        new FloatingText(
+          centroidX,
+          centroidY - 25,
+          `+${(appliedTime / TARGET_FPS).toFixed(1)}s`,
+          "#34D399",
+        ),
+      );
+    }
 
     // 물리 필드에서 제거
     balls = balls.filter((b) => !selectedBalls.includes(b));
     selectedBalls = [];
 
-    if (shouldTriggerFever(comboLevel)) {
-      if (timeBonusActive) {
-        cancelTimeBonus();
-      }
+    if (!timeBonusActive && shouldTriggerFever(comboLevel)) {
       startPerfectTenFever(comboLevel);
       updateEquation();
       return;
@@ -1542,7 +1803,7 @@ function checkSum() {
     }
 
     // 맞춤 보상: 고정 개수만큼 시차 간격으로 위에서 새로 보충
-    const spawnCount = Math.max(1, Math.floor(MATCH_SPAWN_COUNT));
+    const spawnCount = Math.max(1, Math.floor(MATCH.matchSpawnCount));
     for (let i = 0; i < spawnCount; i++) {
       setTimeout(() => {
         if (gameActive && !gamePaused) spawnBall();
@@ -1557,6 +1818,7 @@ function checkSum() {
 
     selectedBalls.forEach((b) => {
       b.selected = false;
+      releaseSelectedBall(b);
       for (let p = 0; p < 6; p++) {
         particles.push(new PopParticle(b.x, b.y, "#EF4444", false));
       }
@@ -1567,13 +1829,13 @@ function checkSum() {
     const centroidY =
       selectedBalls.reduce((acc, b) => acc + b.y, 0) / selectedBalls.length;
     floatingTexts.push(
-      new FloatingText(centroidX, centroidY, `OVER 10! 💥`, "#EF4444"),
+      new FloatingText(centroidX, centroidY, t("play.over10"), "#EF4444"),
     );
 
     selectedBalls = [];
     matchStreak = 0; // 콤보 브레이크 리셋
 
-    penaltyTime = PENALTY_DURATION;
+    penaltyTime = MATCH.penaltyDuration;
   }
 }
 
@@ -1606,12 +1868,12 @@ function handleTap(clientX, clientY) {
       clearHint();
       if (!b.selected) {
         b.selected = true;
-        b.pulseTimer = 0;
+        anchorSelectedBall(b);
         selectedBalls.push(b);
         playSfx("tap", selectedBalls.length);
       } else {
-        // 이미 누른 것 토글 취소
         b.selected = false;
+        releaseSelectedBall(b);
         selectedBalls = selectedBalls.filter((sb) => sb !== b);
         playSfx("tap", Math.max(1, selectedBalls.length));
       }
@@ -1623,7 +1885,10 @@ function handleTap(clientX, clientY) {
 }
 
 // 클릭 및 터치 이벤트 연결
+let suppressMouseUntil = 0;
+
 canvas.addEventListener("mousedown", (e) => {
+  if (Date.now() < suppressMouseUntil) return;
   handleTap(e.clientX, e.clientY);
 });
 
@@ -1640,6 +1905,7 @@ canvas.addEventListener(
 canvas.addEventListener(
   "touchstart",
   (e) => {
+    suppressMouseUntil = Date.now() + 400;
     const touch = e.touches[0];
     handleTap(touch.clientX, touch.clientY);
     e.preventDefault();
@@ -1656,17 +1922,17 @@ function checkStackOver() {
 
   const breached = balls.some((b) => {
     const top = b.y - b.radius;
-    const stackedAtLine = b.y > DEADLINE_Y && top < DEADLINE_Y;
+    const stackedAtLine = b.y > PHYSICS.deadlineY && top < PHYSICS.deadlineY;
     const settled =
-      Math.abs(b.vy) < STACK_SETTLED_VELOCITY &&
-      Math.abs(b.vx) < STACK_SETTLED_VELOCITY;
+      Math.abs(b.vy) < PHYSICS.stackSettledVelocity &&
+      Math.abs(b.vx) < PHYSICS.stackSettledVelocity;
     return stackedAtLine && settled;
   });
 
   if (breached) {
     stackOverTime += 1;
-    if (stackOverTime > STACK_OVER_LIMIT) {
-      endGame("Marbles collapsed past the limit line!");
+    if (stackOverTime > STACK.overLimit) {
+      endGame("stackOver");
     }
   } else {
     stackOverTime = 0;
@@ -1687,7 +1953,7 @@ function loop(timestamp) {
 
   // 1. 위기 상황에 따른 격렬한 쉐이킹 번역 처리
   const dangerActive =
-    !feverActive && !timeBonusActive && timeLeft < DANGER_TIME_THRESHOLD;
+    !feverActive && !timeBonusActive && timeLeft < TIMER.dangerThreshold;
   const dangerVignette = document.getElementById("danger-vignette");
 
   ctx.save();
@@ -1695,18 +1961,12 @@ function loop(timestamp) {
     dangerVignette.style.opacity = "0";
     dangerVignette.classList.remove("pulse-danger-active");
     const pulse = 3.5 + Math.sin(timestamp / 55) * 2.5;
-    ctx.translate(
-      (Math.random() - 0.5) * pulse,
-      (Math.random() - 0.5) * pulse,
-    );
+    ctx.translate((Math.random() - 0.5) * pulse, (Math.random() - 0.5) * pulse);
   } else if (timeBonusActive) {
     dangerVignette.style.opacity = "0";
     dangerVignette.classList.remove("pulse-danger-active");
     const pulse = 2.2 + Math.sin(timestamp / 70) * 1.6;
-    ctx.translate(
-      (Math.random() - 0.5) * pulse,
-      (Math.random() - 0.5) * pulse,
-    );
+    ctx.translate((Math.random() - 0.5) * pulse, (Math.random() - 0.5) * pulse);
   } else if (dangerActive) {
     dangerVignette.style.opacity = "1";
     dangerVignette.classList.add("pulse-danger-active");
@@ -1724,7 +1984,7 @@ function loop(timestamp) {
   const warnAlpha =
     stackOverTime > 0 ? 0.4 + Math.sin(timestamp / 90) * 0.3 : 0.08;
   ctx.fillStyle = `rgba(239, 68, 68, ${warnAlpha * 0.5})`;
-  ctx.fillRect(0, 0, displayWidth, DEADLINE_Y);
+  ctx.fillRect(0, 0, displayWidth, PHYSICS.deadlineY);
 
   ctx.strokeStyle =
     stackOverTime > 0
@@ -1733,8 +1993,8 @@ function loop(timestamp) {
   ctx.lineWidth = 3;
   ctx.setLineDash([8, 6]);
   ctx.beginPath();
-  ctx.moveTo(0, DEADLINE_Y);
-  ctx.lineTo(displayWidth, DEADLINE_Y);
+  ctx.moveTo(0, PHYSICS.deadlineY);
+  ctx.lineTo(displayWidth, PHYSICS.deadlineY);
   ctx.stroke();
   ctx.setLineDash([]); // 원복
 
@@ -1742,7 +2002,11 @@ function loop(timestamp) {
     ctx.fillStyle = "#EF4444";
     ctx.font = "black 11px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("WARNING! OVER THE LINE!", displayWidth / 2, DEADLINE_Y - 15);
+    ctx.fillText(
+      "WARNING! OVER THE LINE!",
+      displayWidth / 2,
+      PHYSICS.deadlineY - 15,
+    );
   }
 
   if (feverActive) {
@@ -1766,11 +2030,11 @@ function loop(timestamp) {
   // 3. 구슬 상태 업데이트 및 전사 드로잉
   balls.forEach((b) => b.update());
   resolveCollisions();
+  pinSelectedBallPositions();
   balls.forEach((b) => {
     if (b.hintGlowTimer > 0) b.hintGlowTimer--;
   });
   balls.forEach((b) => b.draw());
-
 
   // 5. 부서지는 스파크 파티클 갱신
   particles.forEach((p, idx) => {
@@ -1791,10 +2055,15 @@ function loop(timestamp) {
 
   // 7b. 힌트 쿨다운·유휴·자동 힌트
   if (hintCooldown > 0) hintCooldown--;
-  if (!feverActive && !timeBonusActive && selectedBalls.length === 0 && penaltyTime === 0) {
+  if (
+    !feverActive &&
+    !timeBonusActive &&
+    selectedBalls.length === 0 &&
+    penaltyTime === 0
+  ) {
     idleSinceMatch++;
     if (
-      idleSinceMatch >= HINT_IDLE_TIME &&
+      idleSinceMatch >= HINT.idleTime &&
       hintCooldown === 0 &&
       hintedBalls.every((b) => b.hintGlowTimer <= 0)
     ) {
@@ -1804,44 +2073,31 @@ function loop(timestamp) {
   tickShuffleSettling();
   updatePlayDockButtons();
 
-  // 8. 콤보 무효화 기한 차감
-  if (!feverActive && comboResetTimer > 0) {
+  // 8. 콤보 무효화 기한 차감 (TIME BONUS 중에는 콤보 동결)
+  if (!feverActive && !timeBonusActive && comboResetTimer > 0) {
     comboResetTimer--;
     if (comboResetTimer <= 0) {
       matchStreak = 0;
     }
   }
 
+  playTime++;
+
   if (feverActive) {
     updateFeverMode();
+    updateTimeBonusTrigger();
   } else if (timeBonusActive) {
     updateTimeBonusMode();
   } else {
     const surviveInSeconds = playTime / TARGET_FPS;
-    const decayScaling = 1.0 + surviveInSeconds * TIME_DECAY_SCALE;
+    const decayScaling = 1.0 + surviveInSeconds * TIMER.decayScale;
     timeLeft -= decayScaling;
-    playTime++;
     updateDangerVoice();
     updateTimeBonusTrigger();
   }
 
   // HUD 타이머 바 갱신
-  const percent = (timeLeft / MAX_TIME) * 100;
-  if (!feverActive && !timeBonusActive) {
-    timerBar.style.width = `${Math.max(0, percent)}%`;
-    document.getElementById("timer-text").innerText = Math.max(
-      0,
-      timeLeft / TARGET_FPS,
-    ).toFixed(2);
-
-    if (percent < 30) {
-      timerBar.classList.add("timer-bar--danger");
-    } else {
-      timerBar.classList.remove("timer-bar--danger");
-    }
-  } else {
-    setTimerFrozenUI(true);
-  }
+  syncTimerHUD();
 
   const surviveInSeconds = playTime / TARGET_FPS;
   const m = Math.floor(surviveInSeconds / 60)
@@ -1858,7 +2114,7 @@ function loop(timestamp) {
 
   // 게임 패배 여부 체크 후 재순환
   if (!feverActive && !timeBonusActive && timeLeft <= 0) {
-    endGame("Time ran out.");
+    endGame("timeOut");
   } else {
     animationFrameId = requestAnimationFrame(loop);
   }
@@ -1873,13 +2129,14 @@ function startGame() {
   showScreen("playing");
 
   score = 0;
-  timeLeft = INITIAL_TIME;
+  timeLeft = TIMER.initial;
   playTime = 0;
   gameActive = true;
   lastTime = 0;
   stackOverTime = 0;
   matchStreak = 0;
   maxComboLevel = 0;
+  perfectClearCount = 0;
   hintCooldown = 0;
   idleSinceMatch = 0;
   dangerZoneEnterCount = 0;
@@ -1954,7 +2211,7 @@ function endGame(reason) {
   requestAnimationFrame(deathLoop);
 }
 
-// 위에서 구슬 추가 (하단 +구슬 버튼, ADD_BALL_COUNT만큼)
+// 위에서 구슬 추가 (하단 +구슬 버튼, FIELD.addBall.count만큼)
 function addBallFromTop() {
   if (
     !gameActive ||
@@ -1968,9 +2225,11 @@ function addBallFromTop() {
     return;
   }
 
-  const count = Math.max(1, Math.floor(ADD_BALL_COUNT));
+  const count = Math.max(1, Math.floor(FIELD.addBall.count));
   const staggerMs =
-    ADD_BALL_STAGGER > 0 ? (ADD_BALL_STAGGER / TARGET_FPS) * 1000 : 0;
+    FIELD.addBall.staggerFrames > 0
+      ? (FIELD.addBall.staggerFrames / TARGET_FPS) * 1000
+      : 0;
 
   for (let i = 0; i < count; i++) {
     if (staggerMs === 0) {
@@ -2013,6 +2272,7 @@ function shuffleBalls() {
     b.vx = (Math.random() - 0.5) * 16;
     b.vy = -8 - Math.random() * 8;
     b.selected = false;
+    releaseSelectedBall(b);
   });
   selectedBalls = [];
   updateEquation();
@@ -2075,12 +2335,35 @@ tutorialBtn?.addEventListener("click", () => {
   audio.primeFromGesture();
   openTutorialModal();
 });
+historyBtn?.addEventListener("click", () => {
+  audio.primeFromGesture();
+  openHistoryModal();
+});
+resetBtn?.addEventListener("click", () => {
+  audio.primeFromGesture();
+  openResetModal();
+});
 document
   .getElementById("btn-tutorial-close")
   ?.addEventListener("click", closeTutorialModal);
 document
   .getElementById("tutorial-backdrop")
   ?.addEventListener("click", closeTutorialModal);
+document
+  .getElementById("btn-history-close")
+  ?.addEventListener("click", closeHistoryModal);
+document
+  .getElementById("history-backdrop")
+  ?.addEventListener("click", closeHistoryModal);
+document
+  .getElementById("btn-reset-cancel")
+  ?.addEventListener("click", closeResetModal);
+document
+  .getElementById("reset-backdrop")
+  ?.addEventListener("click", closeResetModal);
+document
+  .getElementById("btn-reset-confirm")
+  ?.addEventListener("click", confirmResetStorage);
 
 canvas.addEventListener("click", () => void audio.ensureRunning());
 canvas.addEventListener("touchstart", () => void audio.ensureRunning(), {
@@ -2104,3 +2387,26 @@ audio.bindLifecycle({
     }
   },
 });
+
+initI18n();
+syncMuteTooltip(audio.isMuted());
+
+onLocaleChange(() => {
+  renderTutorial();
+  renderPlayHistory();
+  updateShuffleButtonState();
+  updateAddBallButtonState();
+  if (!screens.result.classList.contains("hidden")) {
+    document.getElementById("gameover-reason").innerText = t(
+      `gameover.${lastGameOverReasonKey}`,
+    );
+  }
+  if (gameActive) {
+    updateEquation();
+    updateFeverEquation();
+    syncFeverOverlay();
+    syncTimeBonusOverlay();
+  }
+});
+
+renderTutorial();

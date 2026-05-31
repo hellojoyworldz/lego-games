@@ -1,13 +1,4 @@
-import {
-  COMBO_VOICE_FILE,
-  COMBO_VOICE_GAIN,
-  PERFECT_VOICE_FILE,
-  PERFECT_VOICE_GAIN,
-  HURRY_UP_VOICE_FILE,
-  HURRY_UP_VOICE_GAIN,
-  BONUS_VOICE_FILE,
-  BONUS_VOICE_GAIN,
-} from "../config.js";
+import { SFX } from "../config.js";
 
 /**
  * Web Audio 합성 기반 범용 효과음 + 콤보/퍼펙트 샘플
@@ -51,10 +42,10 @@ export function createSynthSfx(audio) {
     return { load };
   }
 
-  const comboSample = createSampleLoader(COMBO_VOICE_FILE, "콤보");
-  const perfectSample = createSampleLoader(PERFECT_VOICE_FILE, "퍼펙트");
-  const hurryUpSample = createSampleLoader(HURRY_UP_VOICE_FILE, "허리업");
-  const bonusSample = createSampleLoader(BONUS_VOICE_FILE, "보너스");
+  const comboSample = createSampleLoader(SFX.combo.file, "콤보");
+  const perfectSample = createSampleLoader(SFX.perfect.file, "퍼펙트");
+  const hurryUpSample = createSampleLoader(SFX.hurryUp.file, "허리업");
+  const bonusSample = createSampleLoader(SFX.timeBonus.file, "보너스");
 
   /**
    * @param {ReturnType<typeof createSampleLoader>} loader
@@ -204,7 +195,7 @@ export function createSynthSfx(audio) {
       } else if (type === "combo") {
         const pitchUp = pitchUpOverride ?? 1;
         playComboSynthLayers(audioCtx, pitchUp, now);
-        await playVoiceSample(comboSample, audioCtx, pitchUp, COMBO_VOICE_GAIN);
+        await playVoiceSample(comboSample, audioCtx, pitchUp, SFX.combo.gain);
       } else if (type === "fail") {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
@@ -223,17 +214,17 @@ export function createSynthSfx(audio) {
           perfectSample,
           audioCtx,
           pitchUp,
-          PERFECT_VOICE_GAIN,
+          SFX.perfect.gain,
         );
         if (!played) {
           playPerfectSynthFallback(audioCtx, now);
         }
       } else if (type === "hurryUp") {
         const pitchUp = pitchUpOverride ?? 1;
-        await playVoiceSample(hurryUpSample, audioCtx, pitchUp, HURRY_UP_VOICE_GAIN);
+        await playVoiceSample(hurryUpSample, audioCtx, pitchUp, SFX.hurryUp.gain);
       } else if (type === "bonus") {
         const pitchUp = pitchUpOverride ?? 1;
-        await playVoiceSample(bonusSample, audioCtx, pitchUp, BONUS_VOICE_GAIN);
+        await playVoiceSample(bonusSample, audioCtx, pitchUp, SFX.timeBonus.gain);
       } else if (type === "tapestop") {
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();

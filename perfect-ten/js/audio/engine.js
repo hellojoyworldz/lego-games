@@ -1,5 +1,6 @@
 import { defaultMutedOnLoad, saveSoundEnabledPref } from "./silent-unlock.js";
 import { createIOSSilentChannel } from "./ios-silent-channel.js";
+import { syncMuteTooltip } from "../i18n/index.js";
 
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
 
@@ -196,15 +197,13 @@ export function createAudioEngine() {
     return isMuted;
   }
 
-  function syncMuteButton(btn) {
-    btn.innerText = isMuted ? "🔇" : "🔊";
-    syncMuteTooltip();
+  function syncMuteTooltipLocal() {
+    syncMuteTooltip(isMuted);
   }
 
-  function syncMuteTooltip() {
-    const tooltip = document.getElementById("tooltip-mute");
-    if (!tooltip) return;
-    tooltip.textContent = isMuted ? "Sound OFF!" : "Sound ON!";
+  function syncMuteButton(btn) {
+    btn.innerText = isMuted ? "🔇" : "🔊";
+    syncMuteTooltipLocal();
   }
 
   /** @param {string} buttonId */
